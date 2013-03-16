@@ -10,7 +10,7 @@
 ##### 2. vivacity and enthusiasm
 
 Effervescence or Effervescence Viewer (EV) is a client for Second Life and like
-metaverses. It is a fork and derivative work of the Singularity Viewer conducted
+metaverses. It is a fork and derivative work of the Singularity Viewer started
 by Siana Gearz; Singularity began in November 2010 by forking it from the Ascent
 Viewer, by Balseraph Software Group, which in turn was based upon source code
 modified from the Snowglobe source code released by Linden Lab.
