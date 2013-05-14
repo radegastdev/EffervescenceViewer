@@ -60,15 +60,15 @@
 
 #include "lluictrlfactory.h"
 
+#include "lfsimfeaturehandler.h"
 #include "hippogridmanager.h"
 
-// <edit>
-#include "llclipboard.h"
-// </edit>
 
 // [RLVa:KB]
 #include "rlvhandler.h"
 // [/RLVa:KB]
+
+bool can_set_export(const U32& base, const U32& own, const U32& next);
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Class LLPropertiesObserver
@@ -166,9 +166,6 @@ LLFloaterProperties::LLFloaterProperties(const std::string& name, const LLRect& 
 	mItemID(item_id),
 	mObjectID(object_id),
 	mDirty(TRUE)
-	// <edit>
-	, mExpanded(FALSE)
-	// </edit>
 {
 	LLUICtrlFactory::getInstance()->buildFloater(this,"floater_inventory_item_properties.xml");
 
@@ -203,6 +200,9 @@ LLFloaterProperties::LLFloaterProperties(const std::string& name, const LLRect& 
 	// everyone permissions
 	childSetCommitCallback("CheckEveryoneCopy",&onCommitPermissions, this);
 	childSetCommitCallback("CheckEveryoneMove",&onCommitPermissions, this);
+	childSetCommitCallback("CheckExport", &onCommitPermissions, this);
+	if (!gHippoGridManager->getCurrentGrid()->isSecondLife())
+		LFSimFeatureHandler::instance().setSupportsExportCallback(boost::bind(&LLFloaterProperties::refresh, this));
 	// next owner permissions
 	childSetCommitCallback("CheckNextOwnerModify",&onCommitPermissions, this);
 	childSetCommitCallback("CheckNextOwnerCopy",&onCommitPermissions, this);
@@ -212,13 +212,6 @@ LLFloaterProperties::LLFloaterProperties(const std::string& name, const LLRect& 
 	childSetCommitCallback("RadioSaleType",&onCommitSaleType, this);
 	// "Price" label for edit
 	childSetCommitCallback("EditPrice",&onCommitSaleInfo, this);
-	// <edit>
-	childSetAction("more_btn", &onClickMore, this);
-	childSetAction("less_btn", &onClickLess, this);
-	childSetAction("copy_btn", &onClickCopy, this);
-	childSetAction("update_btn", &onClickUpdate, this);
-	setExpanded(mExpanded);
-	// </edit>
 	// The UI has been built, now fill in all the values
 	refresh();
 }
@@ -264,11 +257,13 @@ void LLFloaterProperties::refresh()
 			"CheckOwnerModify",
 			"CheckOwnerCopy",
 			"CheckOwnerTransfer",
+			"CheckOwnerExport",
 			"CheckGroupCopy",
 			"CheckGroupMod",
 			"CheckGroupMove",
 			"CheckEveryoneCopy",
 			"CheckEveryoneMove",
+			"CheckExport",
 			"CheckNextOwnerModify",
 			"CheckNextOwnerCopy",
 			"CheckNextOwnerTransfer",
@@ -308,28 +303,6 @@ void LLFloaterProperties::draw()
 
 void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 {
-	// <edit>
-	childSetText("EditItemID", item->getUUID().asString());
-	childSetText("EditFolderID", item->getParentUUID().asString());
-	childSetText("EditGroup", item->getPermissions().getGroup().asString());
-	childSetText("EditAssetID", item->getAssetUUID().asString());
-
-	std::string type_str = LLAssetType::lookup(item->getType());
-	if(type_str.c_str() == NULL) type_str = llformat("%d", item->getType());
-	childSetText("EditType", type_str);
-	
-	std::string invtype_str = LLInventoryType::lookup(item->getInventoryType());
-	if(invtype_str.c_str() == NULL) invtype_str = llformat("%d", item->getInventoryType());
-	childSetText("EditInvType", invtype_str);
-	childSetText("EditFlags", llformat("%d", item->getFlags()));
-
-	std::ostringstream strm;
-	item->exportLegacyStream(strm, TRUE);
-	std::string str(strm.str());
-	LLStringUtil::replaceTabsWithSpaces(str, 4);
-	childSetText("item_text", str);
-	// </edit>
-
 	////////////////////////
 	// PERMISSIONS LOOKUP //
 	////////////////////////
@@ -472,6 +445,12 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 	childSetEnabled("CheckOwnerTransfer",FALSE);
 	childSetValue("CheckOwnerTransfer",LLSD((BOOL)(owner_mask & PERM_TRANSFER)));
 
+	bool supports_export = LFSimFeatureHandler::instance().simSupportsExport();
+	childSetEnabled("CheckOwnerExport",false);
+	childSetValue("CheckOwnerExport", supports_export && owner_mask & PERM_EXPORT);
+	if (!gHippoGridManager->getCurrentGrid()->isSecondLife())
+		childSetVisible("CheckOwnerExport", false);
+
 	///////////////////////
 	// DEBUG PERMISSIONS //
 	///////////////////////
@@ -494,11 +473,15 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 
 		perm_string = "B: ";
 		perm_string += mask_to_string(base_mask);
+		if (!supports_export && base_mask & PERM_EXPORT) // Hide Export when not available
+			perm_string.erase(perm_string.find_last_of("E"));
 		childSetText("BaseMaskDebug",perm_string);
 		childSetVisible("BaseMaskDebug",TRUE);
 		
 		perm_string = "O: ";
 		perm_string += mask_to_string(owner_mask);
+		if (!supports_export && owner_mask & PERM_EXPORT) // Hide Export when not available
+			perm_string.erase(perm_string.find_last_of("E"));
 		childSetText("OwnerMaskDebug",perm_string);
 		childSetVisible("OwnerMaskDebug",TRUE);
 		
@@ -511,6 +494,8 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 		perm_string = "E";
 		perm_string += overwrite_everyone ? "*: " : ": ";
 		perm_string += mask_to_string(everyone_mask);
+		if (!supports_export && everyone_mask & PERM_EXPORT) // Hide Export when not available
+			perm_string.erase(perm_string.find_last_of("E"));
 		childSetText("EveryoneMaskDebug",perm_string);
 		childSetVisible("EveryoneMaskDebug",TRUE);
 		
@@ -554,6 +539,8 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 		childSetEnabled("CheckEveryoneCopy",false);
 		childSetEnabled("CheckEveryoneMove",false);
 	}
+	childSetEnabled("CheckExport", supports_export && item->getType() != LLAssetType::AT_OBJECT && gAgentID == item->getCreatorUUID()
+									&& can_set_export(base_mask, owner_mask, next_owner_mask));
 
 	// Set values.
 	BOOL is_group_copy = (group_mask & PERM_COPY) ? TRUE : FALSE;
@@ -566,6 +553,7 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 	
 	childSetValue("CheckEveryoneCopy",LLSD((BOOL)(everyone_mask & PERM_COPY)));
 	childSetValue("CheckEveryoneMove",LLSD((BOOL)(everyone_mask & PERM_MOVE)));
+	childSetValue("CheckExport", supports_export && everyone_mask & PERM_EXPORT);
 
 	///////////////
 	// SALE INFO //
@@ -580,10 +568,11 @@ void LLFloaterProperties::refreshFromItem(LLInventoryItem* item)
 		childSetEnabled("SaleLabel",is_complete);
 		childSetEnabled("CheckPurchase",is_complete);
 
-		childSetEnabled("NextOwnerLabel",TRUE);
-		childSetEnabled("CheckNextOwnerModify",base_mask & PERM_MODIFY);
-		childSetEnabled("CheckNextOwnerCopy",base_mask & PERM_COPY);
-		childSetEnabled("CheckNextOwnerTransfer",next_owner_mask & PERM_COPY);
+		bool no_export = !(everyone_mask & PERM_EXPORT); // Next owner perms can't be changed if set
+		childSetEnabled("NextOwnerLabel", no_export);
+		childSetEnabled("CheckNextOwnerModify", no_export && base_mask & PERM_MODIFY);
+		childSetEnabled("CheckNextOwnerCopy", no_export && base_mask & PERM_COPY);
+		childSetEnabled("CheckNextOwnerTransfer", no_export && next_owner_mask & PERM_COPY);
 
 		childSetEnabled("RadioSaleType",is_complete && is_for_sale);
 		childSetEnabled("TextPrice",is_complete && is_for_sale);
@@ -784,6 +773,11 @@ void LLFloaterProperties::onCommitPermissions(LLUICtrl* ctrl, void* data)
 	{
 		perm.setEveryoneBits(gAgent.getID(), gAgent.getGroupID(),
 						 CheckEveryoneCopy->get(), PERM_COPY);
+	}
+	LLCheckBoxCtrl* CheckExport = self->getChild<LLCheckBoxCtrl>("CheckExport");
+	if(CheckExport)
+	{
+		perm.setEveryoneBits(gAgent.getID(), gAgent.getGroupID(), CheckExport->get(), PERM_EXPORT);
 	}
 
 	LLCheckBoxCtrl* CheckNextOwnerModify = self->getChild<LLCheckBoxCtrl>("CheckNextOwnerModify");
@@ -1010,161 +1004,12 @@ void LLFloaterProperties::closeByID(const LLUUID& item_id, const LLUUID &object_
 	}
 }
 
-// <edit>
-void LLFloaterProperties::onClickMore(void* user_data)
-{
-	LLFloaterProperties* floaterp = (LLFloaterProperties*)user_data;
-	if(floaterp)
-	{
-		LLMultiProperties* host = (LLMultiProperties*)floaterp->getHost();
-		if(host)
-			host->setExpanded(TRUE);
-		else
-			floaterp->setExpanded(TRUE);
-	}
-}
-
-void LLFloaterProperties::onClickLess(void* user_data)
-{
-	LLFloaterProperties* floaterp = (LLFloaterProperties*)user_data;
-	if(floaterp)
-	{
-		LLMultiProperties* host = (LLMultiProperties*)floaterp->getHost();
-		if(host)
-			host->setExpanded(FALSE);
-		else
-			floaterp->setExpanded(FALSE);
-	}
-}
-
-void LLFloaterProperties::setExpanded(BOOL expanded)
-{
-	mExpanded = expanded;
-	LLRect rect = getRect();
-	if(expanded)
-		rect.setOriginAndSize(rect.mLeft, rect.mBottom, 800, rect.getHeight());
-	else
-		rect.setOriginAndSize(rect.mLeft, rect.mBottom, 350, rect.getHeight());
-	setRect(rect);
-	childSetVisible("more_btn", !mExpanded);
-	childSetVisible("less_btn", mExpanded);
-	childSetVisible("item_text", mExpanded);
-	childSetVisible("copy_btn", mExpanded);
-	childSetVisible("update_btn", mExpanded);
-	if(getHost())
-		setCanTearOff(!expanded); // idk why it comes out ugly if expanded
-}
-
-// static
-void LLFloaterProperties::onClickCopy(void* user_data)
-{
-	LLFloaterProperties* floaterp = (LLFloaterProperties*)user_data;
-	if(floaterp)
-	{
-		LLViewerInventoryItem* item = (LLViewerInventoryItem*)floaterp->findItem();
-		if(item)
-		{
-			std::string str(floaterp->childGetValue("item_text").asString());
-			std::string::size_type pos;
-			while((pos = str.find("    ")) != std::string::npos)
-			{
-				str.replace(pos, 4, "\t");
-			}
-
-			std::istringstream strm(str);
-			LLViewerInventoryItem* temp = new LLViewerInventoryItem();
-			temp->importLegacyStream(strm);
-			std::ostringstream strm2;
-			temp->exportLegacyStream(strm2, TRUE);
-			LLWString wstr(utf8str_to_wstring(strm2.str()));
-
-			gClipboard.copyFromSubstring(wstr, 0, wstr.length());
-
-			//delete temp;
-		}
-	}
-}
-
-// static
-void LLFloaterProperties::onClickUpdate(void* user_data)
-{
-	LLFloaterProperties* floaterp = (LLFloaterProperties*)user_data;
-	if(floaterp)
-	{
-		LLViewerInventoryItem* item = (LLViewerInventoryItem*)floaterp->findItem();
-		if(item)
-		{
-			std::string str(floaterp->childGetValue("item_text").asString());
-			std::string::size_type pos;
-			while((pos = str.find("    ")) != std::string::npos)
-			{
-				str.replace(pos, 4, "\t");
-			}
-			
-			std::istringstream strm(str);
-			item->importLegacyStream(strm);
-
-			if(floaterp->mObjectID.isNull())
-			{
-				// This is in the agent's inventory.
-				item->updateServer(FALSE);
-				gInventory.updateItem(item);
-				gInventory.notifyObservers();
-
-				item->setComplete(FALSE);
-				item->fetchFromServer();
-			}
-			else
-			{
-				// This is in an object's contents.
-				LLViewerObject* object = gObjectList.findObject(floaterp->mObjectID);
-				if(object)
-				{
-					object->updateInventory(
-						item,
-						TASK_INVENTORY_ITEM_KEY,
-						false);
-					object->fetchInventoryFromServer();
-				}
-			}
-		}
-	}
-}
-// </edit>
-
 ///----------------------------------------------------------------------------
 /// LLMultiProperties
 ///----------------------------------------------------------------------------
 
 LLMultiProperties::LLMultiProperties(const LLRect &rect) : LLMultiFloater(std::string("Properties"), rect)
-// <edit>
-, mExpanded(FALSE)
-// </edit>
 {
-}
-
-void LLMultiProperties::setExpanded(BOOL expanded)
-{
-	mExpanded = expanded;
-	LLRect rect = getRect();
-	LLRect tab_rect = mTabContainer->getRect();
-	if(expanded)
-	{
-		rect.setOriginAndSize(rect.mLeft, rect.mBottom, 800, rect.getHeight());
-		tab_rect.setOriginAndSize(tab_rect.mLeft, tab_rect.mBottom, 800, tab_rect.getHeight());
-	}
-	else
-	{
-		rect.setOriginAndSize(rect.mLeft, rect.mBottom, 350, rect.getHeight());
-		tab_rect.setOriginAndSize(tab_rect.mLeft, tab_rect.mBottom, 350, tab_rect.getHeight());
-	}
-	setRect(rect);
-	mTabContainer->setRect(tab_rect);
-	for (S32 i = 0; i < mTabContainer->getTabCount(); i++)
-	{
-		LLFloaterProperties* floaterp = (LLFloaterProperties*)mTabContainer->getPanelByIndex(i);
-		floaterp->setExpanded(expanded);
-	}
 }
 
 ///----------------------------------------------------------------------------

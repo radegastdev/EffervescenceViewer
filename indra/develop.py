@@ -45,7 +45,6 @@ import commands
 class CommandError(Exception):
     pass
 
-
 def mkdir(path):
     try:
         os.mkdir(path)
@@ -54,15 +53,19 @@ def mkdir(path):
         if err.errno != errno.EEXIST or not os.path.isdir(path):
             raise
 
-def getcwd():
-    cwd = os.getcwd()
-    if 'a' <= cwd[0] <= 'z' and cwd[1] == ':':
+def prettyprint_path_for_cmake(path):
+    if 'a' <= path[0] <= 'z' and path[1] == ':':
         # CMake wants DOS drive letters to be in uppercase.  The above
         # condition never asserts on platforms whose full path names
         # always begin with a slash, so we don't need to test whether
         # we are running on Windows.
-        cwd = cwd[0].upper() + cwd[1:]
-    return cwd
+        path = path[0].upper() + path[1:]
+    return path
+
+def getcwd():
+    return prettyprint_path_for_cmake(os.getcwd())
+
+source_indra = prettyprint_path_for_cmake(os.path.dirname(os.path.realpath(__file__)))
 
 def quote(opts):
     return '"' + '" "'.join([ opt.replace('"', '') for opt in opts ]) + '"'
@@ -81,7 +84,6 @@ class PlatformSetup(object):
     distcc = True
     cmake_opts = []
     word_size = 32
-    opensim_rules = 'OFF' #whether or not to use rules fit for opensim
     using_express = False
 
     def __init__(self):
@@ -125,7 +127,6 @@ class PlatformSetup(object):
             standalone=self.standalone,
             unattended=self.unattended,
             word_size=self.word_size,
-            opensim_rules=self.opensim_rules,
             type=self.build_type.upper(),
             )
         #if simple:
@@ -134,7 +135,6 @@ class PlatformSetup(object):
                 '-DSTANDALONE:BOOL=%(standalone)s '
                 '-DUNATTENDED:BOOL=%(unattended)s '
                 '-DWORD_SIZE:STRING=%(word_size)s '
-                '-DOPENSIM_RULES:BOOL=%(opensim_rules)s '
                 '-G %(generator)r %(opts)s %(dir)r' % args)
 
     def run_cmake(self, args=[]):
@@ -153,7 +153,7 @@ class PlatformSetup(object):
                     simple = False
                 try:
                     os.chdir(d)
-                    cmd = self.cmake_commandline(cwd, d, args, simple)
+                    cmd = self.cmake_commandline(source_indra, d, args, simple)
                     print 'Running %r in %r' % (cmd, d)
                     self.run(cmd, 'cmake')
                 finally:
@@ -273,18 +273,9 @@ class LinuxSetup(UnixSetup):
         return 'linux'
 
     def build_dirs(self):
-        # Only build the server code if we have it.
         platform_build = '%s-%s' % (self.platform(), self.build_type.lower())
 
-        if self.arch() == 'i686' and self.is_internal_tree():
-            return ['viewer-' + platform_build, 'server-' + platform_build]
-        elif self.arch() == 'x86_64' and self.is_internal_tree():
-            # the viewer does not build in 64bit -- kdu5 issues
-            # we can either use openjpeg, or overhaul our viewer to handle kdu5 or higher
-            # doug knows about kdu issues
-            return ['server-' + platform_build]
-        else:
-            return ['viewer-' + platform_build]
+        return ['viewer-' + platform_build]
 
     def cmake_commandline(self, src_dir, build_dir, opts, simple):
         args = dict(
@@ -296,34 +287,12 @@ class LinuxSetup(UnixSetup):
             type=self.build_type.upper(),
             project_name=self.project_name,
             word_size=self.word_size,
-            opensim_rules=self.opensim_rules,
+            cxx="g++"
             )
-        if not self.is_internal_tree():
-            args.update({'cxx':'g++', 'server':'OFF', 'viewer':'ON'})
-        else:
-            if self.distcc:
-                distcc = self.find_in_path('distcc')
-                baseonly = True
-            else:
-                distcc = []
-                baseonly = False
-            if 'server' in build_dir:
-                gcc = distcc + self.find_in_path(
-                    self.debian_sarge and 'g++-3.3' or 'g++-4.1',
-                    'g++', baseonly)
-                args.update({'cxx': ' '.join(gcc), 'server': 'ON',
-                             'viewer': 'OFF'})
-            else:
-                gcc41 = distcc + self.find_in_path('g++-4.1', 'g++', baseonly)
-                args.update({'cxx': ' '.join(gcc41),
-                             'server': 'OFF',
-                             'viewer': 'ON'})
+
         cmd = (('cmake -DCMAKE_BUILD_TYPE:STRING=%(type)s '
-                '-G %(generator)r -DSERVER:BOOL=%(server)s '
-                '-DVIEWER:BOOL=%(viewer)s -DSTANDALONE:BOOL=%(standalone)s '
-                '-DUNATTENDED:BOOL=%(unattended)s '
+                '-G %(generator)r -DSTANDALONE:BOOL=%(standalone)s '
                 '-DWORD_SIZE:STRING=%(word_size)s '
-                '-DOPENSIM_RULES:BOOL=%(opensim_rules)s '
                 '-DROOT_PROJECT_NAME:STRING=%(project_name)s '
                 '%(opts)s %(dir)r')
                % args)
@@ -437,7 +406,6 @@ class DarwinSetup(UnixSetup):
             unattended=self.unattended,
             project_name=self.project_name,
             universal=self.universal,
-            opensim_rules=self.opensim_rules,
             type=self.build_type.upper(),
             )
         if self.universal == 'ON':
@@ -449,7 +417,6 @@ class DarwinSetup(UnixSetup):
                 '-DSTANDALONE:BOOL=%(standalone)s '
                 '-DUNATTENDED:BOOL=%(unattended)s '
                 '-DWORD_SIZE:STRING=%(word_size)s '
-                '-DOPENSIM_RULES:BOOL=%(opensim_rules)s '
                 '-DROOT_PROJECT_NAME:STRING=%(project_name)s '
                 '%(universal)s '
                 '%(opts)s %(dir)r' % args)
@@ -535,7 +502,6 @@ class WindowsSetup(PlatformSetup):
             unattended=self.unattended,
             project_name=self.project_name,
             word_size=self.word_size,
-            opensim_rules=self.opensim_rules,
             )
         #if simple:
         #    return 'cmake %(opts)s "%(dir)s"' % args
@@ -543,7 +509,6 @@ class WindowsSetup(PlatformSetup):
                 '-DSTANDALONE:BOOL=%(standalone)s '
                 '-DUNATTENDED:BOOL=%(unattended)s '
                 '-DWORD_SIZE:STRING=%(word_size)s '
-                '-DOPENSIM_RULES:BOOL=%(opensim_rules)s '
                 '-DROOT_PROJECT_NAME:STRING=%(project_name)s '
                 '%(opts)s "%(dir)s"' % args)
 
@@ -719,7 +684,6 @@ class CygwinSetup(WindowsSetup):
             unattended=self.unattended,
             project_name=self.project_name,
             word_size=self.word_size,
-            opensim_rules=self.opensim_rules,
             )
         #if simple:
         #    return 'cmake %(opts)s "%(dir)s"' % args
@@ -727,7 +691,6 @@ class CygwinSetup(WindowsSetup):
                 '-DUNATTENDED:BOOl=%(unattended)s '
                 '-DSTANDALONE:BOOL=%(standalone)s '
                 '-DWORD_SIZE:STRING=%(word_size)s '
-                '-DOPENSIM_RULES:BOOL=%(opensim_rules)s '
                 '-DROOT_PROJECT_NAME:STRING=%(project_name)s '
                 '%(opts)s "%(dir)s"' % args)
 
@@ -766,21 +729,15 @@ Commands:
 
 Command-options for "configure":
   We use cmake variables to change the build configuration.
-  -DSERVER:BOOL=OFF          Don't configure simulator/dataserver/etc
-  -DVIEWER:BOOL=OFF          Don't configure the viewer
   -DPACKAGE:BOOL=ON          Create "package" target to make installers
   -DLOCALIZESETUP:BOOL=ON    Create one win_setup target per supported language
   -DLL_TESTS:BOOL=OFF        Don't generate unit test projects
   -DEXAMPLEPLUGIN:BOOL=OFF   Don't generate example plugin project
   -DDISABLE_TCMALLOC:BOOL=ON Disable linkage of TCMalloc. (64bit builds automatically disable TCMalloc)
-  -DVISTA_ICON:BOOL=ON       Allow pre-2008 VS to use vista-optimized resource file. (Requires updated rcdll.dll!)
 
 Examples:
-  Set up a viewer-only project for your system:
-    develop.py configure -DSERVER:BOOL=OFF
-  
-  Set up a Visual Studio 2005 project with "package" target:
-    develop.py -G vc80 configure -DPACKAGE:BOOL=ON
+  Set up a Visual Studio 2010 project with "package" target:
+    develop.py -G vc100 configure -DPACKAGE:BOOL=ON
 '''
 
 def main(arguments):

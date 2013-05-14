@@ -1329,9 +1329,10 @@ void LLMeshUploadThread::preStart()
 }
 
 AIMeshUpload::AIMeshUpload(LLMeshUploadThread::instance_list& data, LLVector3& scale, bool upload_textures, bool upload_skin, bool upload_joints, std::string const& upload_url, bool do_upload,
-	LLHandle<LLWholeModelFeeObserver> const& fee_observer, LLHandle<LLWholeModelUploadObserver> const& upload_observer) : mWholeModelUploadURL(upload_url)
+	LLHandle<LLWholeModelFeeObserver> const& fee_observer, LLHandle<LLWholeModelUploadObserver> const& upload_observer) :
+		mMeshUpload(new AIStateMachineThread<LLMeshUploadThread>), mWholeModelUploadURL(upload_url)
 {
-	mMeshUpload->init(data, scale, upload_textures, upload_skin, upload_joints, do_upload, fee_observer, upload_observer);
+	mMeshUpload->thread_impl().init(data, scale, upload_textures, upload_skin, upload_joints, do_upload, fee_observer, upload_observer);
 }
 
 char const* AIMeshUpload::state_str_impl(state_type run_state) const
@@ -1347,21 +1348,21 @@ char const* AIMeshUpload::state_str_impl(state_type run_state) const
 
 void AIMeshUpload::initialize_impl()
 {
-	mMeshUpload->preStart();
+	mMeshUpload->thread_impl().preStart();
 	set_state(AIMeshUpload_start);
 }
 
-void AIMeshUpload::multiplex_impl()
+void AIMeshUpload::multiplex_impl(state_type run_state)
 {
-	switch (mRunState)
+	switch (run_state)
 	{
 		case AIMeshUpload_start:
-			mMeshUpload.run(this, AIMeshUpload_threadFinished);
-			idle(AIMeshUpload_start);					// Wait till the thread finished.
+			mMeshUpload->run(this, AIMeshUpload_threadFinished);
+			idle();										// Wait till the thread finished.
 			break;
 		case AIMeshUpload_threadFinished:
-			mMeshUpload->postRequest(mWholeModelUploadURL, this);
-			idle(AIMeshUpload_threadFinished);			// Wait till the responder finished.
+			mMeshUpload->thread_impl().postRequest(mWholeModelUploadURL, this);
+			idle();										// Wait till the responder finished.
 			break;
 		case AIMeshUpload_responderFinished:
 			finish();
@@ -1400,14 +1401,6 @@ void LLMeshUploadThread::postRequest(std::string& whole_model_upload_url, AIMesh
 			new LLWholeModelUploadResponder(mModelData, mUploadObserverHandle)/*,*/
 			DEBUG_CURLIO_PARAM(debug_off), keep_alive, state_machine, AIMeshUpload_responderFinished);
 	}
-}
-
-void AIMeshUpload::abort_impl()
-{
-}
-
-void AIMeshUpload::finish_impl()
-{
 }
 
 void dump_llsd_to_file(const LLSD& content, std::string filename)
@@ -1788,7 +1781,7 @@ void LLMeshLODResponder::completedRaw(U32 status, const std::string& reason,
 
 	if (data_size < (S32)mRequestedBytes)
 	{
-		if (status == 499 || status == 503)
+		if (is_internal_http_error_that_warrants_a_retry(status) || status == HTTP_SERVICE_UNAVAILABLE)
 		{	//timeout or service unavailable, try again
 			LLMeshRepository::sHTTPRetryCount++;
 			gMeshRepo.mThread->loadMeshLOD(mMeshParams, mLOD);
@@ -1842,7 +1835,7 @@ void LLMeshSkinInfoResponder::completedRaw(U32 status, const std::string& reason
 
 	if (data_size < (S32)mRequestedBytes)
 	{
-		if (status == 499 || status == 503)
+		if (is_internal_http_error_that_warrants_a_retry(status) || status == HTTP_SERVICE_UNAVAILABLE)
 		{	//timeout or service unavailable, try again
 			LLMeshRepository::sHTTPRetryCount++;
 			gMeshRepo.mThread->loadMeshSkinInfo(mMeshID);
@@ -1896,7 +1889,7 @@ void LLMeshDecompositionResponder::completedRaw(U32 status, const std::string& r
 
 	if (data_size < (S32)mRequestedBytes)
 	{
-		if (status == 499 || status == 503)
+		if (is_internal_http_error_that_warrants_a_retry(status) || status == HTTP_SERVICE_UNAVAILABLE)
 		{	//timeout or service unavailable, try again
 			LLMeshRepository::sHTTPRetryCount++;
 			gMeshRepo.mThread->loadMeshDecomposition(mMeshID);
@@ -1950,7 +1943,7 @@ void LLMeshPhysicsShapeResponder::completedRaw(U32 status, const std::string& re
 
 	if (data_size < (S32)mRequestedBytes)
 	{
-		if (status == 499 || status == 503)
+		if (is_internal_http_error_that_warrants_a_retry(status) || status == HTTP_SERVICE_UNAVAILABLE)
 		{	//timeout or service unavailable, try again
 			LLMeshRepository::sHTTPRetryCount++;
 			gMeshRepo.mThread->loadMeshPhysicsShape(mMeshID);
@@ -2001,13 +1994,13 @@ void LLMeshHeaderResponder::completedRaw(U32 status, const std::string& reason,
 		//	<< "Header responder failed with status: "
 		//	<< status << ": " << reason << llendl;
 
-		// 503 (service unavailable) or 499 (timeout)
+		// HTTP_SERVICE_UNAVAILABLE (503) or HTTP_INTERNAL_ERROR_*'s.
 		// can be due to server load and can be retried
 
 		// TODO*: Add maximum retry logic, exponential backoff
 		// and (somewhat more optional than the others) retries
 		// again after some set period of time
-		if (status == 503 || status == 499)
+		if (is_internal_http_error_that_warrants_a_retry(status) || status == HTTP_SERVICE_UNAVAILABLE)
 		{	//retry
 			LLMeshRepository::sHTTPRetryCount++;
 			LLMeshRepoThread::HeaderRequest req(mMeshParams);
@@ -2516,7 +2509,7 @@ void LLMeshRepository::notifyMeshUnavailable(const LLVolumeParams& mesh_params, 
 }
 
 S32 LLMeshRepository::getActualMeshLOD(const LLVolumeParams& mesh_params, S32 lod)
-{ 
+{
 	return mThread->getActualMeshLOD(mesh_params, lod);
 }
 
@@ -3028,6 +3021,7 @@ void LLPhysicsDecomp::doDecomposition()
 		param_map[params[i].mName] = params+i;
 	}
 
+	LLCDResult ret = LLCD_OK;
 	//set parameter values
 	for (decomp_params::iterator iter = mCurRequest->mParams.begin(); iter != mCurRequest->mParams.end(); ++iter)
 	{
@@ -3040,8 +3034,6 @@ void LLPhysicsDecomp::doDecomposition()
 		{	//couldn't find valid parameter
 			continue;
 		}
-
-		U32 ret = LLCD_OK;
 
 		if (param->mType == LLCDParam::LLCD_FLOAT)
 		{
@@ -3059,8 +3051,6 @@ void LLPhysicsDecomp::doDecomposition()
 	}
 
 	mCurRequest->setStatusMessage("Executing.");
-
-	LLCDResult ret = LLCD_OK;
 
 	if (LLConvexDecomposition::getInstance() != NULL)
 	{

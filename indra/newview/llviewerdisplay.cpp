@@ -1159,7 +1159,6 @@ void render_hud_attachments()
 	if (LLPipeline::sShowHUDAttachments && !gDisconnected && setup_hud_matrices())
 	{
 		LLCamera hud_cam = *LLViewerCamera::getInstance();
-		LLVector3 origin = hud_cam.getOrigin();
 		hud_cam.setOrigin(-1.f,0,0);
 		hud_cam.setAxes(LLVector3(1,0,0), LLVector3(0,1,0), LLVector3(0,0,1));
 		LLViewerCamera::updateFrustumPlanes(hud_cam, TRUE);
@@ -1517,6 +1516,7 @@ void render_ui_3d()
 	stop_glerror();
 }
 
+extern void check_blend_funcs();
 void render_ui_2d()
 {
 	LLGLSUIDefault gls_ui;
@@ -1562,7 +1562,9 @@ void render_ui_2d()
 		gGL.popMatrix();
 		stop_glerror();
 	}
+	if(gDebugGL)check_blend_funcs();
 	gViewerWindow->draw();
+	if(gDebugGL)check_blend_funcs();
 
 	// reset current origin for font rendering, in case of tiling render
 	LLFontGL::sCurOrigin.set(0, 0);

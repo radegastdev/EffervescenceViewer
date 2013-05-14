@@ -33,7 +33,7 @@
 
 #include <apr_portable.h>	// apr_os_thread_t, apr_os_thread_current(), apr_os_thread_equal().
 #include <iosfwd>			// std::ostream.
-#include "llpreprocessor.h"	// LL_COMMON_API, LL_COMMON_API_TLS
+#include "llpreprocessor.h"	// LL_COMMON_API, LL_COMMON_API_TLS, LL_UNLIKELY
 
 // Lightweight wrapper around apr_os_thread_t.
 // This class introduces no extra assembly code after optimization; it's only intend is to provide type-safety.
@@ -63,6 +63,7 @@ public:
 	static void set_main_thread_id(void);					// Called once to set sMainThreadID.
 	static void set_current_thread_id(void);				// Called once for every thread to set lCurrentThread.
 #ifndef LL_DARWIN
+	LL_COMMON_API void clear(void);
 	LL_COMMON_API void reset(void);
 	LL_COMMON_API bool equals_current_thread(void) const;
 	LL_COMMON_API static bool in_main_thread(void);
@@ -74,6 +75,7 @@ public:
 	static apr_os_thread_t getCurrentThread_inline(void) { return lCurrentThread; }
 #else
 	// Both variants are inline on OS X.
+	void clear(void) { mID = undefinedID; }
 	void reset(void) { mID = apr_os_thread_current(); }
 	void reset_inline(void) { mID = apr_os_thread_current(); }
 	bool equals_current_thread(void) const { return apr_os_thread_equal(mID, apr_os_thread_current()); }
@@ -84,6 +86,16 @@ public:
 	static apr_os_thread_t getCurrentThread_inline(void) { return apr_os_thread_current(); }
 #endif
 };
+
+// Debugging function.
+inline bool is_single_threaded(AIThreadID& thread_id)
+{
+  if (LL_UNLIKELY(thread_id.is_no_thread()))
+  {
+	thread_id.reset();
+  }
+  return thread_id.equals_current_thread();
+}
 
 // Legacy function.
 inline bool is_main_thread(void)

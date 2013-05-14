@@ -136,73 +136,6 @@ BOOL AOInvTimer::tick()
 	}
 	return FALSE;
 }
-// NC DROP -------------------------------------------------------
-
-class AONoteCardDropTarget : public LLView
-{
-public:
-	AONoteCardDropTarget(const std::string& name, const LLRect& rect, void (*callback)(LLViewerInventoryItem*));
-	~AONoteCardDropTarget();
-
-	void doDrop(EDragAndDropType cargo_type, void* cargo_data);
-
-	//
-	// LLView functionality
-	virtual BOOL handleDragAndDrop(S32 x, S32 y, MASK mask, BOOL drop,
-								   EDragAndDropType cargo_type,
-								   void* cargo_data,
-								   EAcceptance* accept,
-								   std::string& tooltip_msg);
-protected:
-	void	(*mDownCallback)(LLViewerInventoryItem*);
-};
-
-
-AONoteCardDropTarget::AONoteCardDropTarget(const std::string& name, const LLRect& rect,
-						  void (*callback)(LLViewerInventoryItem*)) :
-	LLView(name, rect, NOT_MOUSE_OPAQUE, FOLLOWS_ALL),
-	mDownCallback(callback)
-{
-}
-
-AONoteCardDropTarget::~AONoteCardDropTarget()
-{
-}
-
-void AONoteCardDropTarget::doDrop(EDragAndDropType cargo_type, void* cargo_data)
-{
-//	llinfos << "AONoteCardDropTarget::doDrop()" << llendl;
-}
-
-BOOL AONoteCardDropTarget::handleDragAndDrop(S32 x, S32 y, MASK mask, BOOL drop,
-									 EDragAndDropType cargo_type,
-									 void* cargo_data,
-									 EAcceptance* accept,
-									 std::string& tooltip_msg)
-{
-	BOOL handled = FALSE;
-	if(getParent())
-	{
-		handled = TRUE;
-		LLViewerInventoryItem* inv_item = (LLViewerInventoryItem*)cargo_data;
-		if(gInventory.getItem(inv_item->getUUID()))
-		{
-			*accept = ACCEPT_YES_COPY_SINGLE;
-			if(drop)
-			{
-				mDownCallback(inv_item);
-			}
-		}
-		else
-		{
-			*accept = ACCEPT_NO;
-		}
-	}
-	return handled;
-}
-
-AONoteCardDropTarget * LLFloaterAO::mAOItemDropTarget;
-
 
 // STUFF -------------------------------------------------------
 
@@ -283,8 +216,6 @@ LLFloaterAO::~LLFloaterAO()
 	mcomboBox_lands = 0;
 	mcomboBox_standups = 0;
 	mcomboBox_prejumps = 0;
-	delete mAOItemDropTarget;
-	mAOItemDropTarget = NULL;
 //	llinfos << "floater destroyed" << llendl;
 }
 
@@ -315,39 +246,6 @@ bool LLFloaterAO::getInstance()
 
 BOOL LLFloaterAO::postBuild()
 {
-	LLView *target_view = getChild<LLView>("ao_notecard");
-	if(target_view)
-	{
-		if (mAOItemDropTarget)
-		{
-			delete mAOItemDropTarget;
-		}
-		mAOItemDropTarget = new AONoteCardDropTarget("drop target", target_view->getRect(), AOItemDrop);//, mAvatarID);
-		addChild(mAOItemDropTarget);
-	}
-	if(LLStartUp::getStartupState() == STATE_STARTED)
-	{
-		LLUUID itemidimport = (LLUUID)gSavedPerAccountSettings.getString("AOConfigNotecardID");
-		LLViewerInventoryItem* itemimport = gInventory.getItem(itemidimport);
-		if(itemimport)
-		{
-			LLStringUtil::format_map_t args;
-			args["[ITEM]"] = itemimport->getName();
-			childSetValue("ao_nc_text", LLTrans::getString("CurrentlySetTo", args));
-		}
-		else if(itemidimport.isNull())
-		{
-			childSetValue("ao_nc_text", LLTrans::getString("CurrentlyNotSet"));
-		}
-		else
-		{
-			childSetValue("ao_nc_text", LLTrans::getString("CurrentlySetToAnItemNotOnThisAccount"));
-		}
-	}
-	else
-	{
-		childSetValue("ao_nc_text", LLTrans::getString("NotLoggedIn"));
-	}
 	childSetAction("more_btn", onClickMore, this);
 	childSetAction("less_btn", onClickLess, this);
 
@@ -356,9 +254,9 @@ BOOL LLFloaterAO::postBuild()
 	childSetAction("newcard",onClickNewCard,this);
 	childSetAction("prevstand",onClickPrevStand,this);
 	childSetAction("nextstand",onClickNextStand,this);
-	getChild<LLComboBox>("AOEnabled")->setCommitCallback(boost::bind(&LLFloaterAO::onClickToggleAO));
-	getChild<LLComboBox>("AOSitsEnabled")->setCommitCallback(boost::bind(&LLFloaterAO::onClickToggleSits));
-	getChild<LLComboBox>("standtime")->setCommitCallback(boost::bind(&LLFloaterAO::onSpinnerCommit,_1));
+	getChild<LLUICtrl>("AOEnabled")->setCommitCallback(boost::bind(&LLFloaterAO::onClickToggleAO));
+	getChild<LLUICtrl>("AOSitsEnabled")->setCommitCallback(boost::bind(&LLFloaterAO::onClickToggleSits));
+	getChild<LLUICtrl>("standtime")->setCommitCallback(boost::bind(&LLFloaterAO::onSpinnerCommit,_1));
 	mcomboBox_stands = getChild<LLComboBox>("stands");
 	mcomboBox_walks = getChild<LLComboBox>("walks");
 	mcomboBox_runs = getChild<LLComboBox>("runs");
@@ -593,7 +491,6 @@ void LLFloaterAO::updateLayout(LLFloaterAO* floater)
 		floater->childSetVisible("sits", advanced);
 		floater->childSetVisible("gsits", advanced);
 		floater->childSetVisible("crouchs", advanced);
-		floater->childSetVisible("crouchwalks", advanced);
 		floater->childSetVisible("falls", advanced);
 		floater->childSetVisible("hovers", advanced);
 		floater->childSetVisible("flys", advanced);
@@ -792,14 +689,6 @@ LLUUID LLFloaterAO::getCurrentStandId()
 void LLFloaterAO::setCurrentStandId(const LLUUID& id)
 {
 	mCurrentStandId = id;
-}
-
-void LLFloaterAO::AOItemDrop(LLViewerInventoryItem* item)
-{
-	gSavedPerAccountSettings.setString("AOConfigNotecardID", item->getUUID().asString());
-	LLStringUtil::format_map_t args;
-	args["[ITEM]"] = item->getName();
-	sInstance->childSetValue("ao_nc_text", LLTrans::getString("CurrentlySetTo", args));
 }
 
 LLUUID LLFloaterAO::GetAnimID(const LLUUID& id)
@@ -1384,7 +1273,7 @@ BOOL LLFloaterAO::SetDefault(void* userdata, LLUUID ao_id, std::string defaultan
 	if (sInstance && (userdata))
 	{
 		LLComboBox *box = (LLComboBox *) userdata;
-		if (LLUUID::null == ao_id)
+		if (ao_id.isNull())
 		{
 			box->clear();
 			box->removeall();

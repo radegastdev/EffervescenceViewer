@@ -265,8 +265,6 @@ void LLFace::setPool(LLFacePool* pool)
 
 void LLFace::setPool(LLFacePool* new_pool, LLViewerTexture *texturep)
 {
-	LLMemType mt1(LLMemType::MTYPE_DRAWABLE);
-	
 	if (!new_pool)
 	{
 		llerrs << "Setting pool to null!" << llendl;
@@ -442,8 +440,6 @@ U16 LLFace::getGeometryAvatar(
 						LLStrider<F32>		 &vertex_weights,
 						LLStrider<LLVector4> &clothing_weights)
 {
-	LLMemType mt1(LLMemType::MTYPE_DRAWABLE);
-
 	if (mVertexBuffer.notNull())
 	{
 		mVertexBuffer->getVertexStrider      (vertices, mGeomIndex, mGeomCount);
@@ -459,8 +455,6 @@ U16 LLFace::getGeometryAvatar(
 U16 LLFace::getGeometry(LLStrider<LLVector3> &vertices, LLStrider<LLVector3> &normals,
 					    LLStrider<LLVector2> &tex_coords, LLStrider<U16> &indicesp)
 {
-	LLMemType mt1(LLMemType::MTYPE_DRAWABLE);
-	
 	if (mVertexBuffer.notNull())
 	{
 		mVertexBuffer->getVertexStrider(vertices,   mGeomIndex, mGeomCount);
@@ -776,8 +770,6 @@ bool less_than_max_mag(const LLVector4a& vec)
 BOOL LLFace::genVolumeBBoxes(const LLVolume &volume, S32 f,
 								const LLMatrix4& mat_vert_in, const LLMatrix3& mat_normal_in, BOOL global_volume)
 {
-	LLMemType mt1(LLMemType::MTYPE_DRAWABLE);
-
 	//get bounding box
 	if (mDrawablep->isState(LLDrawable::REBUILD_VOLUME | LLDrawable::REBUILD_POSITION | LLDrawable::REBUILD_RIGGED))
 	{
@@ -1075,9 +1067,11 @@ bool LLFace::canRenderAsMask()
 
 	const LLTextureEntry* te = getTextureEntry();
 
+	static const LLCachedControl<bool> use_rmse_auto_mask("SHUseRMSEAutoMask",false);
+	static const LLCachedControl<F32> auto_mask_max_rmse("SHAutoMaskMaxRMSE",.09f);
 	if ((te->getColor().mV[3] == 1.0f) && // can't treat as mask if we have face alpha
 		(te->getGlow() == 0.f) && // glowing masks are hard to implement - don't mask
-		getTexture()->getIsAlphaMask()) // texture actually qualifies for masking (lazily recalculated but expensive)
+		(!getViewerObject()->isAttachment() && getTexture()->getIsAlphaMask(use_rmse_auto_mask ? auto_mask_max_rmse : -1.f))) // texture actually qualifies for masking (lazily recalculated but expensive)
 	{
 		if (LLPipeline::sRenderDeferred)
 		{

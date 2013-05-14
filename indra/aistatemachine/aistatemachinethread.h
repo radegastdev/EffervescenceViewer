@@ -73,11 +73,11 @@ enum hello_world_state_type {
 // The statemachine class (this is almost a template).
 class HelloWorld : public AIStateMachine {
   private:
-	AIStateMachineThread<HelloWorldThread> mHelloWorld;
+	LLPointer<AIStateMachineThread<HelloWorldThread> > mHelloWorld;
 	bool mErr;
 
   public:
-	HelloWorld() : mErr(false) { }
+	HelloWorld() : mHelloWorld(new AIStateMachineThread<HelloWorldThread>), mErr(false) { }
 
 	// Print to stderr or stdout?
 	void init(bool err) { mErr = err; }
@@ -89,19 +89,8 @@ class HelloWorld : public AIStateMachine {
 	// Handle initializing the object.
 	/*virtual*/ void initialize_impl(void);
 
-	// Handle mRunState.
-	/*virtual*/ void multiplex_impl(void);
-
-	// Handle aborting from current bs_run state.
-	/*virtual*/ void abort_impl(void) { }
-
-	// Handle cleaning up from initialization (or post abort) state.
-	/*virtual*/ void finish_impl(void)
-	{
-	  // Kill object by default.
-	  // This can be overridden by calling run() from the callback function.
-	  kill();
-	}
+	// Handle run_state.
+	/*virtual*/ void multiplex_impl(state_type run_state);
 
 	// Implemenation of state_str for run states.
 	/*virtual*/ char const* state_str_impl(state_type run_state) const
@@ -119,24 +108,24 @@ class HelloWorld : public AIStateMachine {
 
 void HelloWorld::initialize_impl(void)
 {
-  mHelloWorld->init(mErr);							// Initialize the thread object.
+  mHelloWorld->thread_impl().init(mErr);			// Initialize the thread object.
   set_state(HelloWorld_start);
 }
 
-void HelloWorld::multiplex_impl(void)
+void HelloWorld::multiplex_impl(state_type run_state)
 {
-  switch (mRunState)
+  switch (run_state)
   {
 	case HelloWorld_start:
 	{
-	  mHelloWorld.run(this, HelloWorld_done);		// Run HelloWorldThread and set the state of 'this' to HelloWorld_done when finished.
+	  mHelloWorld->run(this, HelloWorld_done);		// Run HelloWorldThread and set the state of 'this' to HelloWorld_done when finished.
 	  idle(HelloWorld_start);						// Always go idle after starting a thread!
 	  break;
 	}
 	case HelloWorld_done:
 	{
 	  // We're done. Lets also abort when the thread reported no success.
-	  if (mHelloWorld->successful())				// Read output/result of thread object.
+	  if (mHelloWorld->thread_impl().successful())	// Read output/result of thread object.
 		finish();
 	  else
 		abort();
@@ -150,9 +139,9 @@ void HelloWorld::multiplex_impl(void)
 class AIStateMachineThreadBase;
 
 // Derive from this to implement the code that must run in another thread.
-class AIThreadImpl : public LLThreadSafeRefCount {
+class AIThreadImpl {
   private:
-    template<typename THREAD_IMPL> friend struct AIStateMachineThread;
+    template<typename THREAD_IMPL> friend class AIStateMachineThread;
 	typedef AIAccess<AIStateMachineThreadBase*> StateMachineThread_wat;
 	AIThreadSafeSimpleDC<AIStateMachineThreadBase*> mStateMachineThread;
 
@@ -169,6 +158,9 @@ class AIThreadImpl : public LLThreadSafeRefCount {
   public:
 	char const* getName(void) const { return mName; }
 #endif
+
+  protected:
+	virtual ~AIThreadImpl() { }
 };
 
 // The base class for statemachine threads.
@@ -177,34 +169,38 @@ class AIStateMachineThreadBase : public AIStateMachine {
 	// The actual thread (derived from LLThread).
 	class Thread;
 
+  protected:
+	typedef AIStateMachine direct_base_type;
+
 	// The states of this state machine.
 	enum thread_state_type {
-	  start_thread = AIStateMachine::max_state,		// Start the thread (if necessary create it first).
+	  start_thread = direct_base_type::max_state,	// Start the thread (if necessary create it first).
 	  wait_stopped									// Wait till the thread is stopped.
 	};
+  public:
+	static state_type const max_state = wait_stopped + 1;
 
   protected:
-	AIStateMachineThreadBase(AIThreadImpl* impl) : mImpl(impl) { }
+	AIStateMachineThreadBase(void) { }
 
   private:
 	// Handle initializing the object.
 	/*virtual*/ void initialize_impl(void);
 
 	// Handle mRunState.
-	/*virtual*/ void multiplex_impl(void);
+	/*virtual*/ void multiplex_impl(state_type run_state);
 
 	// Handle aborting from current bs_run state.
 	/*virtual*/ void abort_impl(void);
 
-	// Handle cleaning up from initialization (or post abort) state.
-	/*virtual*/ void finish_impl(void) { }
-
 	// Implemenation of state_str for run states.
 	/*virtual*/ char const* state_str_impl(state_type run_state) const;
 
+	// Returns a reference to the implementation code that needs to be run in the thread.
+	virtual AIThreadImpl& impl(void) = 0;
+
   private:
 	Thread* mThread;		// The thread that the code is run in.
-	AIThreadImpl* mImpl;	// Pointer to the implementation code that needs to be run in the thread.
 	bool mAbort;			// (Inverse of) return value of AIThreadImpl::run(). Only valid in state wait_stopped.
 
   public:
@@ -215,14 +211,22 @@ class AIStateMachineThreadBase : public AIStateMachine {
 // The state machine that runs T::run() in a thread.
 // THREAD_IMPL Must be derived from AIThreadImpl.
 template<typename THREAD_IMPL>
-struct AIStateMachineThread : public LLPointer<THREAD_IMPL>, public AIStateMachineThreadBase {
-  // Constructor.
-  AIStateMachineThread(void) :
-	  LLPointer<THREAD_IMPL>(new THREAD_IMPL),
-	  AIStateMachineThreadBase(LLPointer<THREAD_IMPL>::get())
-  {
-	*AIThreadImpl::StateMachineThread_wat(static_cast<AIThreadImpl*>(LLPointer<THREAD_IMPL>::get())->mStateMachineThread) = this;
-  }
+class AIStateMachineThread : public AIStateMachineThreadBase {
+  private:
+	THREAD_IMPL mThreadImpl;
+
+  public:
+	// Constructor.
+	AIStateMachineThread(void)
+	{
+	  *AIThreadImpl::StateMachineThread_wat(mThreadImpl.mStateMachineThread) = this;
+	}
+
+	// Accessor.
+	THREAD_IMPL& thread_impl(void) { return mThreadImpl; }
+
+  protected:
+	/*virtual*/ AIThreadImpl& impl(void) { return mThreadImpl; }
 };
 
 #endif

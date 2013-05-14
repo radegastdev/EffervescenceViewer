@@ -195,18 +195,21 @@ public:
 	LLAssetType::EType mAssetType;
 };
 
-static void request(
-	const std::string& url,
+//static
+void LLHTTPClient::request(
+	std::string const& url,
 	LLURLRequest::ERequestAction method,
 	Injector* body_injector,
 	LLHTTPClient::ResponderPtr responder,
-	AIHTTPHeaders& headers/*,*/
+	AIHTTPHeaders& headers,
+	AIPerService::Approvement* approved/*,*/
 	DEBUG_CURLIO_PARAM(EDebugCurl debug),
-	EKeepAlive keepalive = keep_alive,
-	bool is_auth = false,
-	bool no_compression = false,
-	AIStateMachine* parent = NULL,
-	AIStateMachine::state_type new_parent_state = 0)
+	EKeepAlive keepalive,
+	EDoesAuthentication does_auth,
+	EAllowCompressedReply allow_compression,
+	AIStateMachine* parent,
+	AIStateMachine::state_type new_parent_state,
+	AIEngine* default_engine)
 {
 	llassert(responder);
 
@@ -219,7 +222,7 @@ static void request(
 	LLURLRequest* req;
 	try
 	{
-		req = new LLURLRequest(method, url, body_injector, responder, headers, keepalive, is_auth, no_compression);
+		req = new LLURLRequest(method, url, body_injector, responder, headers, approved, keepalive, does_auth, allow_compression);
 #ifdef DEBUG_CURLIO
 		req->mCurlEasyRequest.debug(debug);
 #endif
@@ -231,7 +234,7 @@ static void request(
 		return ;
 	}
 
-	req->run(parent, new_parent_state, parent != NULL);
+	req->run(parent, new_parent_state, parent != NULL, true, default_engine);
 }
 
 void LLHTTPClient::getByteRange(std::string const& url, S32 offset, S32 bytes, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
@@ -240,22 +243,22 @@ void LLHTTPClient::getByteRange(std::string const& url, S32 offset, S32 bytes, R
 	{
 		headers.addHeader("Range", llformat("bytes=%d-%d", offset, offset + bytes - 1));
 	}
-    request(url, LLURLRequest::HTTP_GET, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+    request(url, HTTP_GET, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }
 
 void LLHTTPClient::head(std::string const& url, ResponderHeadersOnly* responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
-	request(url, LLURLRequest::HTTP_HEAD, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_HEAD, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }
 
 void LLHTTPClient::get(std::string const& url, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
-	request(url, LLURLRequest::HTTP_GET, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_GET, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }
 
 void LLHTTPClient::getHeaderOnly(std::string const& url, ResponderHeadersOnly* responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
-	request(url, LLURLRequest::HTTP_HEAD, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_HEAD, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }
 
 void LLHTTPClient::get(std::string const& url, LLSD const& query, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
@@ -302,7 +305,7 @@ AIHTTPTimeoutPolicy const& LLHTTPClient::ResponderBase::getHTTPTimeoutPolicy(voi
 void LLHTTPClient::ResponderBase::decode_llsd_body(U32 status, std::string const& reason, LLChannelDescriptors const& channels, buffer_ptr_t const& buffer, LLSD& content)
 {
 	AICurlInterface::Stats::llsd_body_count++;
-	if (status == HTTP_INTERNAL_ERROR)
+	if (is_internal_http_error(status))
 	{
 		// In case of an internal error (ie, a curl error), a description of the (curl) error is the best we can do.
 		// In any case, the body if anything was received at all, can not be relied upon.
@@ -345,6 +348,12 @@ void LLHTTPClient::ResponderBase::decode_llsd_body(U32 status, std::string const
 		{
 			llwarns << "The server sent us a response with http status " << status << " and LLSD(!) body: \"" << ss.str() << "\"!" << llendl;
 		}
+		// This is not really an error, and it has been known to happen before. It just normally never happens (at the moment)
+		// and therefore warrants an investigation. Linden Lab (or other grids) might start to send error messages
+		// as LLSD in the body in future, but until that happens frequently we might want to leave this assert in.
+		// Note that an HTTP error code means an error at the transport level in most cases-- so I'm highly suspicious
+		// when there is any additional information in the body in LLSD format: it is not unlikely to be a server
+		// bug, where the returned HTTP status code should have been 200 instead.
 		llassert(!server_sent_llsd_with_http_error);
 	}
 #endif
@@ -353,7 +362,7 @@ void LLHTTPClient::ResponderBase::decode_llsd_body(U32 status, std::string const
 void LLHTTPClient::ResponderBase::decode_raw_body(U32 status, std::string const& reason, LLChannelDescriptors const& channels, buffer_ptr_t const& buffer, std::string& content)
 {
 	AICurlInterface::Stats::raw_body_count++;
-	if (status == HTTP_INTERNAL_ERROR)
+	if (is_internal_http_error(status))
 	{
 		// In case of an internal error (ie, a curl error), a description of the (curl) error is the best we can do.
 		// In any case, the body if anything was received at all, can not be relied upon.
@@ -487,7 +496,8 @@ void BlockingResponder::wait(void)
 	// We're the main thread, so we have to give AIStateMachine CPU cycles.
 	while (!mFinished)
 	{
-	  AIStateMachine::mainloop();
+	  // AIFIXME: this can probably be removed once curl is detached from the main thread.
+	  gMainThreadEngine.mainloop();
 	  ms_sleep(10);
 	}
   }
@@ -609,11 +619,10 @@ static LLSD blocking_request(
 
 	responder->wait();
 
-	S32 http_status = HTTP_INTERNAL_ERROR;
 	LLSD response = LLSD::emptyMap();
 	CURLcode result = responder->result_code();
+	S32 http_status = responder->http_status();
 
-	http_status = responder->http_status();
 	bool http_success = http_status >= 200 && http_status < 300;
 	if (result == CURLE_OK && http_success)
 	{
@@ -685,17 +694,22 @@ U32 LLHTTPClient::blockingGetRaw(const std::string& url, std::string& body/*,*/ 
 
 void LLHTTPClient::put(std::string const& url, LLSD const& body, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
-	request(url, LLURLRequest::HTTP_PUT, new LLSDInjector(body), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_PUT, new LLSDInjector(body), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), no_keep_alive, no_does_authentication, no_allow_compressed_reply);
 }
 
 void LLHTTPClient::post(std::string const& url, LLSD const& body, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive, AIStateMachine* parent, AIStateMachine::state_type new_parent_state)
 {
-	request(url, LLURLRequest::HTTP_POST, new LLSDInjector(body), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, false, false, parent, new_parent_state);
+	request(url, HTTP_POST, new LLSDInjector(body), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, no_does_authentication, allow_compressed_reply, parent, new_parent_state);
+}
+
+void LLHTTPClient::post_approved(std::string const& url, LLSD const& body, ResponderPtr responder, AIHTTPHeaders& headers, AIPerService::Approvement* approved/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive, AIStateMachine* parent, AIStateMachine::state_type new_parent_state)
+{
+	request(url, HTTP_POST, new LLSDInjector(body), responder, headers, approved/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, no_does_authentication, allow_compressed_reply, parent, new_parent_state, &gMainThreadEngine);
 }
 
 void LLHTTPClient::postXMLRPC(std::string const& url, XMLRPC_REQUEST xmlrpc_request, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive)
 {
-  	request(url, LLURLRequest::HTTP_POST, new XMLRPCInjector(xmlrpc_request), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, true, false);		// Does use compression.
+  	request(url, HTTP_POST, new XMLRPCInjector(xmlrpc_request), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, does_authentication, allow_compressed_reply);
 }
 
 void LLHTTPClient::postXMLRPC(std::string const& url, char const* method, XMLRPC_VALUE value, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive)
@@ -706,33 +720,33 @@ void LLHTTPClient::postXMLRPC(std::string const& url, char const* method, XMLRPC
 	XMLRPC_RequestSetData(xmlrpc_request, value);
 	// XMLRPCInjector takes ownership of xmlrpc_request and will free it when done.
 	// LLURLRequest takes ownership of the XMLRPCInjector object and will free it when done.
-  	request(url, LLURLRequest::HTTP_POST, new XMLRPCInjector(xmlrpc_request), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, true, true);		// Does not use compression.
+  	request(url, HTTP_POST, new XMLRPCInjector(xmlrpc_request), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive, does_authentication, no_allow_compressed_reply);
 }
 
 void LLHTTPClient::postRaw(std::string const& url, char const* data, S32 size, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive)
 {
-	request(url, LLURLRequest::HTTP_POST, new RawInjector(data, size), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
+	request(url, HTTP_POST, new RawInjector(data, size), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
 }
 
 void LLHTTPClient::postFile(std::string const& url, std::string const& filename, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive)
 {
-	request(url, LLURLRequest::HTTP_POST, new FileInjector(filename), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
+	request(url, HTTP_POST, new FileInjector(filename), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
 }
 
 void LLHTTPClient::postFile(std::string const& url, LLUUID const& uuid, LLAssetType::EType asset_type, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug), EKeepAlive keepalive)
 {
-	request(url, LLURLRequest::HTTP_POST, new VFileInjector(uuid, asset_type), responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
+	request(url, HTTP_POST, new VFileInjector(uuid, asset_type), responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug), keepalive);
 }
 
 // static
 void LLHTTPClient::del(std::string const& url, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
-	request(url, LLURLRequest::HTTP_DELETE, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_DELETE, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }
 
 // static
 void LLHTTPClient::move(std::string const& url, std::string const& destination, ResponderPtr responder, AIHTTPHeaders& headers/*,*/ DEBUG_CURLIO_PARAM(EDebugCurl debug))
 {
 	headers.addHeader("Destination", destination);
-	request(url, LLURLRequest::HTTP_MOVE, NULL, responder, headers/*,*/ DEBUG_CURLIO_PARAM(debug));
+	request(url, HTTP_MOVE, NULL, responder, headers, NULL/*,*/ DEBUG_CURLIO_PARAM(debug));
 }

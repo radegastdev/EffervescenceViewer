@@ -33,12 +33,12 @@
 
 class AIStateMachineThreadBase::Thread : public LLThread {
   private:
-	LLPointer<AIThreadImpl> mImpl;
+	LLPointer<AIStateMachineThreadBase> mImpl;
 	bool mNeedCleanup;
   public:
-	Thread(AIThreadImpl* impl) :
+	Thread(AIStateMachineThreadBase* impl) :
 #ifdef LL_DEBUG
-	  LLThread(impl->getName()),
+	  LLThread(impl->impl().getName()),
 #else
 	  LLThread("AIStateMachineThreadBase::Thread"),
 #endif
@@ -46,7 +46,7 @@ class AIStateMachineThreadBase::Thread : public LLThread {
   protected:
 	/*virtual*/ void run(void)
 	{
-	  mNeedCleanup = mImpl->thread_done(mImpl->run());
+	  mNeedCleanup = mImpl->impl().thread_done(mImpl->impl().run());
 	}
 	/*virtual*/ void terminated(void)
 	{
@@ -65,7 +65,7 @@ class AIStateMachineThreadBase::Thread : public LLThread {
 	}
   public:
 	// TODO: Implement a thread pool. For now, just create a new one every time.
-	static Thread* allocate(AIThreadImpl* impl) { return new Thread(impl); }
+	static Thread* allocate(AIStateMachineThreadBase* impl) { return new Thread(impl); }
 	static void completed(Thread* threadp) { delete threadp; }
 };
 
@@ -88,15 +88,15 @@ void AIStateMachineThreadBase::initialize_impl(void)
   set_state(start_thread);
 }
 
-void AIStateMachineThreadBase::multiplex_impl(void)
+void AIStateMachineThreadBase::multiplex_impl(state_type run_state)
 {
-  switch(mRunState)
+  switch(run_state)
   {
 	case start_thread:
-	  mThread = Thread::allocate(mImpl);
+	  mThread = Thread::allocate(this);
 	  // Set next state.
 	  set_state(wait_stopped);
-	  idle(wait_stopped);		// Wait till the thread returns.
+	  idle();					// Wait till the thread returns.
 	  mThread->start();
 	  break;
 	case wait_stopped:
@@ -124,10 +124,10 @@ void AIStateMachineThreadBase::abort_impl(void)
 {
   if (mThread)
   {
-	// If this AIStateMachineThreadBase still exists then the first base class of
-	// AIStateMachineThread<THREAD_IMPL>, LLPointer<THREAD_IMPL>, also still exists
-	// and therefore mImpl is valid.
-	bool need_cleanup = mImpl->state_machine_done(mThread);		// Signal the fact that we aborted.
+	// If this AIStateMachineThreadBase still exists then the AIStateMachineThread<THREAD_IMPL>
+	// that is derived from it still exists and therefore its member THREAD_IMPL also still exists
+	// and therefore impl() is valid.
+	bool need_cleanup = impl().state_machine_done(mThread);		// Signal the fact that we aborted.
 	if (need_cleanup)
 	{
 	  // This is an unlikely race condition. We have been aborted by our parent,
@@ -179,12 +179,8 @@ bool AIThreadImpl::thread_done(bool result)
   {
 	// If state_machine_thread is non-NULL then AIThreadImpl::abort_impl wasn't called,
 	// which means the state machine still exists. In fact, it should be in the waiting() state.
-	// It can also happen that the state machine is being aborted right now (but it will still exist).
-	// (Note that waiting() and running() aren't strictly thread-safe (we should really lock
-	// mSetStateLock here) but by first calling waiting() and then running(), and assuming that
-	// changing an int from the value 1 to the value 2 is atomic, this will work since the
-	// only possible transition is from waiting to not running).
-	llassert(state_machine_thread->waiting() || !state_machine_thread->running());
+	// It can also happen that the state machine is being aborted right now.
+	llassert(state_machine_thread->waiting_or_aborting());
 	state_machine_thread->schedule_abort(!result);
 	// Note that if the state machine is not running (being aborted, ie - hanging in abort_impl
 	// waiting for the lock on mStateMachineThread) then this is simply ignored.

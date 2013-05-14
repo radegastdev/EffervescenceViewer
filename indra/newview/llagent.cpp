@@ -229,9 +229,6 @@ private:
 // Statics
 //
 
-BOOL LLAgent::exlPhantom = 0;
-BOOL LLAgent::mForceTPose = 0;
-
 const F32 LLAgent::TYPING_TIMEOUT_SECS = 5.f;
 
 std::map<std::string, std::string> LLAgent::sTeleportErrorMessages;
@@ -652,17 +649,6 @@ BOOL LLAgent::getFlying() const
 	return mControlFlags & AGENT_CONTROL_FLY; 
 }
 
-// Better Set Phantom options ~Charbl
-void LLAgent::setPhantom(BOOL phantom)
-{
-	exlPhantom = phantom;
-}
-
-BOOL LLAgent::getPhantom()
-{
-	return exlPhantom;
-}
-
 //-----------------------------------------------------------------------------
 // setFlying()
 //-----------------------------------------------------------------------------
@@ -727,8 +713,14 @@ void LLAgent::setFlying(BOOL fly)
 //-----------------------------------------------------------------------------
 // toggleFlying()
 //-----------------------------------------------------------------------------
+// static
 void LLAgent::toggleFlying()
 {
+	if ( gAgent.mAutoPilot )
+	{
+		LLToolPie::instance().stopClickToWalk();
+	}
+
 	BOOL fly = !gAgent.getFlying();
 
 	gAgent.setFlying( fly );
@@ -756,20 +748,6 @@ void LLAgent::standUp()
 		setControlFlags(AGENT_CONTROL_STAND_UP);
 	}
 // [/RLVa:KB]
-}
-
-void LLAgent::togglePhantom()
-{
-	BOOL phan = !(exlPhantom);
-
-	setPhantom( phan );
-}
-
-void LLAgent::toggleTPosed()
-{
-	BOOL posed = !(mForceTPose);
-
-	setTPosed(posed);
 }
 
 void LLAgent::handleServerBakeRegionTransition(const LLUUID& region_id)
@@ -1315,17 +1293,6 @@ LLQuaternion LLAgent::getQuat() const
 //-----------------------------------------------------------------------------
 U32 LLAgent::getControlFlags()
 {
-/*
-	// HACK -- avoids maintenance of control flags when camera mode is turned on or off,
-	// only worries about it when the flags are measured
-	if (mCameraMode == CAMERA_MODE_MOUSELOOK) 
-	{
-		if ( !(mControlFlags & AGENT_CONTROL_MOUSELOOK) )
-		{
-			mControlFlags |= AGENT_CONTROL_MOUSELOOK;
-		}
-	}
-*/
 	return mControlFlags;
 }
 
@@ -1419,9 +1386,8 @@ void LLAgent::setAFK()
 //-----------------------------------------------------------------------------
 void LLAgent::clearAFK()
 {
+	if (gSavedSettings.getBOOL("FakeAway")) return;
 	gAwayTriggerTimer.reset();
-	if (!gSavedSettings.controlExists("FakeAway")) gSavedSettings.declareBOOL("FakeAway", FALSE, "", NO_PERSIST);
-	if (gSavedSettings.getBOOL("FakeAway") == TRUE) return;
 
 	// Gods can sometimes get into away state (via gestures)
 	// without setting the appropriate control flag. JC
@@ -1917,8 +1883,7 @@ BOOL LLAgent::needsRenderHead()
 //-----------------------------------------------------------------------------
 void LLAgent::startTyping()
 {
-	if (gSavedSettings.getBOOL("FakeAway")) 
-		return;
+	if (gSavedSettings.getBOOL("FakeAway")) return;
 	mTypingTimer.reset();
 
 	if (getRenderState() & AGENT_STATE_TYPING)
@@ -2035,6 +2000,7 @@ void LLAgent::endAnimationUpdateUI()
 		{
 			(*mMouselookModeOutSignal)();
 		}
+
 		// Only pop if we have pushed...
 		if (TRUE == mViewsPushed)
 		{
@@ -2310,7 +2276,7 @@ void LLAgent::setStartPosition( U32 location_id )
     if (isAgentAvatarValid())
     {
         // the z height is at the agent's feet
-        agent_pos.mV[VZ] -= 0.5f * gAgentAvatarp->mBodySize.mV[VZ];
+        agent_pos.mV[VZ] -= 0.5f * (gAgentAvatarp->mBodySize.mV[VZ] + gAgentAvatarp->mAvatarOffset.mV[VZ]);
     }
 
     agent_pos.mV[VX] = llclamp( agent_pos.mV[VX], INSET, REGION_WIDTH - INSET );
@@ -2876,9 +2842,9 @@ void LLAgent::buildFullnameAndTitle(std::string& name) const
 	}
 }
 
-BOOL LLAgent::isInGroup(const LLUUID& group_id) const
+BOOL LLAgent::isInGroup(const LLUUID& group_id, BOOL ignore_god_mode /* FALSE */) const
 {
-	if (isGodlike())
+	if (!ignore_god_mode && isGodlike())
 		return true;
 
 	S32 count = mGroups.count();
@@ -3102,13 +3068,13 @@ void LLAgent::sendAnimationRequest(const LLUUID &anim_id, EAnimRequest request)
 // [RLVa:KB] - Checked: 2011-05-11 (RLVa-1.3.0i) | Added: RLVa-1.3.0i
 void LLAgent::setAlwaysRun()
 {
-	mbAlwaysRun = true;//(!rlv_handler_t::isEnabled()) || (!gRlvHandler.hasBehaviour(RLV_BHVR_ALWAYSRUN));
+	mbAlwaysRun = (!rlv_handler_t::isEnabled()) || (!gRlvHandler.hasBehaviour(RLV_BHVR_ALWAYSRUN));
 	sendWalkRun();
 }
 
 void LLAgent::setTempRun()
 {
-	mbTempRun = true;//(!rlv_handler_t::isEnabled()) || (!gRlvHandler.hasBehaviour(RLV_BHVR_TEMPRUN));
+	mbTempRun = (!rlv_handler_t::isEnabled()) || (!gRlvHandler.hasBehaviour(RLV_BHVR_TEMPRUN));
 	sendWalkRun();
 }
 
@@ -3896,7 +3862,7 @@ bool LLAgent::teleportCore(bool is_local)
 
 	// close the map panel so we can see our destination.
 	// we don't close search floater, see EXT-5840.
-	LLFloaterWorldMap::hide(NULL);
+	LLFloaterWorldMap::hide();
 
 	// hide land floater too - it'll be out of date
 	LLFloaterLand::hideInstance();
@@ -4092,6 +4058,7 @@ void LLAgent::teleportViaLandmark(const LLUUID& landmark_asset_id)
 		return;
 	}
 // [/RLVa:KB]
+
 	mTeleportRequest = LLTeleportRequestPtr(new LLTeleportRequestViaLandmark(landmark_asset_id));
 	startTeleportRequest();
 }
@@ -4189,6 +4156,7 @@ void LLAgent::teleportViaLocation(const LLVector3d& pos_global)
 		}
 	}
 // [/RLVa:KB]
+
 	mTeleportRequest = LLTeleportRequestPtr(new LLTeleportRequestViaLocation(pos_global));
 	startTeleportRequest();
 }
@@ -4261,6 +4229,7 @@ void LLAgent::teleportViaLocationLookAt(const LLVector3d& pos_global)
 		return;
 	}
 // [/RLVa:KB]
+
 	mTeleportRequest = LLTeleportRequestPtr(new LLTeleportRequestViaLocationLookAt(pos_global));
 	startTeleportRequest();
 }
@@ -4527,23 +4496,7 @@ void LLAgent::sendAgentSetAppearance()
 	// NOTE -- when we start correcting all of the other Havok geometry 
 	// to compensate for the COLLISION_TOLERANCE ugliness we will have 
 	// to tweak this number again
-	LLVector3 body_size = gAgentAvatarp->mBodySize;
-
-	static LLCachedControl<F32> x_off("AscentAvatarXModifier");
-	static LLCachedControl<F32> y_off("AscentAvatarYModifier");
-	static LLCachedControl<F32> z_off("AscentAvatarZModifier");
-
-	body_size.mV[VX] += x_off;
-	body_size.mV[VY] += y_off;
-// [RLVa:KB] - Checked: 2010-10-11 (RLVa-1.2.0e) | Added: RLVa-1.2.0e
-	if (rlv_handler_t::isEnabled())
-	{
-		F32 rlvz_off = RlvSettings::getAvatarOffsetZ();
-		body_size.mV[VZ] += fabs(rlvz_off) ? rlvz_off : z_off;
-	}
-	else
-// [/RLVa:KB]
-		body_size.mV[VZ] += z_off;
+	LLVector3 body_size = gAgentAvatarp->mBodySize + gAgentAvatarp->getLegacyAvatarOffset();
 
 	msg->addVector3Fast(_PREHASH_Size, body_size);	
 
@@ -4745,6 +4698,16 @@ void LLAgent::sendAgentUpdateUserInfo(bool im_via_email, const std::string& dire
 	gMessageSystem->addString("DirectoryVisibility", directory_visibility);
 	gAgent.sendReliableMessage();
 }
+
+void LLAgent::dumpGroupInfo()
+{
+	llinfos << "group   " << mGroupName << llendl;
+	llinfos << "ID      " << mGroupID << llendl;
+	llinfos << "powers " << mGroupPowers << llendl;
+	llinfos << "title   " << mGroupTitle << llendl;
+	//llinfos << "insig   " << mGroupInsigniaID << llendl;
+}
+
 // Draw a representation of current autopilot target
 void LLAgent::renderAutoPilotTarget()
 {
@@ -4990,4 +4953,5 @@ void LLTeleportRequestViaLocationLookAt::restartTeleport()
 {
 	gAgent.doTeleportViaLocationLookAt(getPosGlobal());
 }
+
 // EOF

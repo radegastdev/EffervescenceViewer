@@ -38,7 +38,7 @@
 #include "llagent.h"
 #include "llbutton.h"
 #include "llcommandhandler.h"
-#include "llviewercontrol.h"
+#include "llenvmanager.h"
 #include "llfloaterbuycurrency.h"
 #include "llfloaterchat.h"
 #include "llfloaterdirectory.h"		// to spawn search
@@ -51,7 +51,10 @@
 #include "llkeyboard.h"
 #include "lllineeditor.h"
 #include "llmenugl.h"
+#include "llmenuoptionpathfindingrebakenavmesh.h"
 #include "llnotify.h"
+#include "llpathfindingmanager.h"
+#include "llpathfindingnavmeshstatus.h"
 #include "llimview.h"
 #include "lltextbox.h"
 #include "llui.h"
@@ -64,6 +67,8 @@
 #include "llresmgr.h"
 #include "llworld.h"
 #include "llstatgraph.h"
+#include "llviewercontrol.h"
+#include "llviewergenericmessage.h"
 #include "llviewermenu.h"	// for gMenuBarView
 #include "llviewerparcelmgr.h"
 #include "llviewerthrottle.h"
@@ -122,6 +127,8 @@ static void onClickFly(void*);
 static void onClickPush(void*);
 static void onClickVoice(void*);
 static void onClickBuild(void*);
+static void onClickPFDirty(void*);
+static void onClickPFDisabled(void*);
 static void onClickSeeAV(void*);
 static void onClickScripts(void*);
 static void onClickBuyLand(void*);
@@ -131,13 +138,39 @@ std::vector<std::string> LLStatusBar::sDays;
 std::vector<std::string> LLStatusBar::sMonths;
 const U32 LLStatusBar::MAX_DATE_STRING_LENGTH = 2000;
 
+class LLDispatchUPCBalance : public LLDispatchHandler
+{
+public:
+	virtual bool operator()(
+		const LLDispatcher* dispatcher,
+		const std::string& key,
+		const LLUUID& invoice,
+		const sparam_t& strings)
+	{
+		S32 upc = atoi(strings[0].c_str());
+		gStatusBar->setUPC(upc);
+		return true;
+	}
+};
+
+static LLDispatchUPCBalance sDispatchUPCBalance;
+
 LLStatusBar::LLStatusBar(const std::string& name, const LLRect& rect)
 :	LLPanel(name, LLRect(), FALSE),		// not mouse opaque
 mBalance(0),
+mUPC(0),
 mHealth(100),
 mSquareMetersCredit(0),
-mSquareMetersCommitted(0)
+mSquareMetersCommitted(0),
+mRegionCrossingSlot(),
+mNavMeshSlot(),
+mIsNavMeshDirty(false)
 {
+	mUPCSupported = gHippoGridManager->getConnectedGrid()->getUPCSupported();
+
+	if (mUPCSupported)
+		gGenericDispatcher.addHandler("upcbalance", &sDispatchUPCBalance);
+
 	// status bar can possible overlay menus?
 	setMouseOpaque(FALSE);
 	setIsChrome(TRUE);
@@ -159,9 +192,13 @@ mSquareMetersCommitted(0)
 
 	mTextParcelName = getChild<LLTextBox>("ParcelNameText" );
 	mTextBalance = getChild<LLTextBox>("BalanceText" );
+	mTextUPC = getChild<LLTextBox>("UPCText" );
 
 	mTextHealth = getChild<LLTextBox>("HealthText" );
 	mTextTime = getChild<LLTextBox>("TimeText" );
+
+	if (!mUPCSupported)
+		mTextUPC->setVisible(false);
 
 	childSetAction("scriptout", onClickScriptDebug, this);
 	childSetAction("health", onClickHealth, this);
@@ -169,6 +206,8 @@ mSquareMetersCommitted(0)
 	childSetAction("buyland", onClickBuyLand, this );
 	childSetAction("buycurrency", onClickBuyCurrency, this );
 	childSetAction("no_build", onClickBuild, this );
+	childSetAction("pf_dirty", onClickPFDirty, this);
+	childSetAction("pf_disabled", onClickPFDisabled, this);
 	childSetAction("status_SeeAV", onClickSeeAV, this );
 	childSetAction("no_scripts", onClickScripts, this );
 	childSetAction("restrictpush", onClickPush, this );
@@ -188,7 +227,10 @@ mSquareMetersCommitted(0)
 	// that don't support currency yet -- MC
 	LLButton* buybtn = getChild<LLButton>("buycurrency");
 	buybtn->setLabelArg("[CURRENCY]", gHippoGridManager->getConnectedGrid()->getCurrencySymbol());
-	
+
+	mRegionCrossingSlot = LLEnvManagerNew::getInstance()->setRegionChangeCallback(boost::bind(&LLStatusBar::createNavMeshStatusListenerForCurrentRegion, this));
+	createNavMeshStatusListenerForCurrentRegion();
+
 	// Adding Net Stat Graph
 	S32 x = getRect().getWidth() - 2;
 	S32 y = 0;
@@ -197,9 +239,7 @@ mSquareMetersCommitted(0)
 	mSGBandwidth = new LLStatGraph("BandwidthGraph", r);
 	mSGBandwidth->setFollows(FOLLOWS_BOTTOM | FOLLOWS_RIGHT);
 	mSGBandwidth->setStat(&LLViewerStats::getInstance()->mKBitStat);
-	std::string text = childGetText("bandwidth_tooltip") + " ";
-	LLUIString bandwidth_tooltip = text;	// get the text from XML until this widget is XML driven
-	mSGBandwidth->setLabel(bandwidth_tooltip.getString());
+	mSGBandwidth->setLabel(getString("bandwidth_tooltip") + " ");
 	mSGBandwidth->setUnits("Kbps");
 	mSGBandwidth->setPrecision(0);
 	mSGBandwidth->setMouseOpaque(FALSE);
@@ -210,9 +250,7 @@ mSquareMetersCommitted(0)
 	mSGPacketLoss = new LLStatGraph("PacketLossPercent", r);
 	mSGPacketLoss->setFollows(FOLLOWS_BOTTOM | FOLLOWS_RIGHT);
 	mSGPacketLoss->setStat(&LLViewerStats::getInstance()->mPacketsLostPercentStat);
-	text = childGetText("packet_loss_tooltip") + " ";
-	LLUIString packet_loss_tooltip = text;	// get the text from XML until this widget is XML driven
-	mSGPacketLoss->setLabel(packet_loss_tooltip.getString());
+	mSGPacketLoss->setLabel(getString("packet_loss_tooltip") + " ");
 	mSGPacketLoss->setUnits("%");
 	mSGPacketLoss->setMin(0.f);
 	mSGPacketLoss->setMax(5.f);
@@ -235,6 +273,9 @@ LLStatusBar::~LLStatusBar()
 
 	delete mHealthTimer;
 	mHealthTimer = NULL;
+
+	mRegionCrossingSlot.disconnect();
+	mNavMeshSlot.disconnect();
 
 	// LLView destructor cleans up children
 }
@@ -461,6 +502,22 @@ void LLStatusBar::refresh()
 		x += buttonRect.getWidth();
 	}
 
+	if (region)
+	{
+		bool pf_disabled = !region->dynamicPathfindingEnabled();
+		getChild<LLUICtrl>("pf_dirty")->setVisible(mIsNavMeshDirty);
+		getChild<LLUICtrl>("pf_disabled")->setVisible(pf_disabled);
+		const std::string pf_icon = mIsNavMeshDirty ? "pf_dirty" : pf_disabled ? "pf_disabled" : "";
+		if (!pf_icon.empty())
+		{
+			x += 6;
+			childGetRect(pf_icon, buttonRect);
+			r.setOriginAndSize(x, y, buttonRect.getWidth(), buttonRect.getHeight());
+			childSetRect(pf_icon, r);
+			x += buttonRect.getWidth();
+		}
+	}
+
 	BOOL canBuyLand = parcel
 		&& !parcel->isPublic()
 		&& LLViewerParcelMgr::getInstance()->canAgentBuyParcel(parcel, false);
@@ -566,6 +623,14 @@ void LLStatusBar::refresh()
 	}
 
 	// Set rects of money, buy money, time
+	if (mUPCSupported)
+	{
+		childGetRect("UPCText", r);
+		r.translate( new_right - r.mRight, 0);
+		childSetRect("UPCText", r);
+		new_right -= r.getWidth() - 18;
+	}
+
 	childGetRect("BalanceText", r);
 	r.translate( new_right - r.mRight, 0);
 	childSetRect("BalanceText", r);
@@ -602,6 +667,8 @@ void LLStatusBar::refresh()
 void LLStatusBar::setVisibleForMouselook(bool visible)
 {
 	mTextBalance->setVisible(visible);
+	if (mUPCSupported)
+		mTextUPC->setVisible(visible);
 	mTextTime->setVisible(visible);
 	childSetVisible("buycurrency", visible);
 	childSetVisible("search_editor", visible);
@@ -624,7 +691,7 @@ void LLStatusBar::creditBalance(S32 credit)
 void LLStatusBar::setBalance(S32 balance)
 {
 	mTextBalance->setText(gHippoGridManager->getConnectedGrid()->getCurrencySymbol().c_str() +
-		LLResMgr::getInstance()->getMonetaryString(balance));
+		LLResMgr::getInstance()->getMonetaryString(balance - mUPC));
 
 	if (mBalance && (fabs((F32)(mBalance - balance)) > gSavedSettings.getF32("UISndMoneyChangeThreshold")))
 	{
@@ -641,6 +708,14 @@ void LLStatusBar::setBalance(S32 balance)
 	}
 }
 
+void LLStatusBar::setUPC(S32 upc)
+{
+	mTextUPC->setText("UPC " + LLResMgr::getInstance()->getMonetaryString(upc));
+
+	mUPC = upc;
+
+	setBalance(mBalance);
+}
 
 // static
 void LLStatusBar::sendMoneyBalanceRequest()
@@ -769,6 +844,47 @@ static void onClickVoice(void* )
 static void onClickBuild(void*)
 {
 	LLNotificationsUtil::add("NoBuild");
+}
+
+static bool rebakeRegionCallback(const LLSD& n, const LLSD& r)
+{
+	if(!LLNotificationsUtil::getSelectedOption(n, r)) //0 is Yes
+	{
+		LLMenuOptionPathfindingRebakeNavmesh::getInstance()->sendRequestRebakeNavmesh();
+		return true;
+	}
+	return false;
+}
+
+static void onClickPFDirty(void*)
+{
+	LLNotificationsUtil::add("PathfindingDirty", LLSD(), LLSD(), rebakeRegionCallback);
+}
+
+static void onClickPFDisabled(void*)
+{
+	LLNotificationsUtil::add("DynamicPathfindingDisabled");
+}
+
+void LLStatusBar::createNavMeshStatusListenerForCurrentRegion()
+{
+	if (mNavMeshSlot.connected())
+	{
+		mNavMeshSlot.disconnect();
+	}
+
+	LLViewerRegion *currentRegion = gAgent.getRegion();
+	if (currentRegion != NULL)
+	{
+		mNavMeshSlot = LLPathfindingManager::getInstance()->registerNavMeshListenerForRegion(currentRegion, boost::bind(&LLStatusBar::onNavMeshStatusChange, this, _2));
+		LLPathfindingManager::getInstance()->requestGetNavMeshForRegion(currentRegion, true);
+	}
+}
+
+void LLStatusBar::onNavMeshStatusChange(const LLPathfindingNavMeshStatus &pNavMeshStatus)
+{
+	mIsNavMeshDirty = pNavMeshStatus.isValid() && (pNavMeshStatus.getStatus() != LLPathfindingNavMeshStatus::kComplete);
+	refresh();
 }
 
 static void onClickSeeAV(void*)

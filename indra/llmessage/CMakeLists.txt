@@ -22,15 +22,15 @@ include_directories(
     )
 
 set(llmessage_SOURCE_FILES
+    aiaverage.cpp
     aicurl.cpp
     aicurleasyrequeststatemachine.cpp
-    aicurlperhost.cpp
+    aicurlperservice.cpp
     aicurlthread.cpp
     aihttpheaders.cpp
     aihttptimeout.cpp
     aihttptimeoutpolicy.cpp
     debug_libcurl.cpp
-    llhttpclient.cpp
     llares.cpp
     llareslistener.cpp
     llassetstorage.cpp
@@ -46,6 +46,7 @@ set(llmessage_SOURCE_FILES
     lldispatcher.cpp
     llfiltersd2xmlrpc.cpp
     llhost.cpp
+    llhttpclient.cpp
     llhttpnode.cpp
     llhttpsender.cpp
     llinstantmessage.cpp
@@ -91,9 +92,9 @@ set(llmessage_SOURCE_FILES
     lluseroperation.cpp
     llxfer.cpp
     llxfer_file.cpp
-    llxfermanager.cpp
     llxfer_mem.cpp
     llxfer_vfile.cpp
+    llxfermanager.cpp
     llxorcipher.cpp
     machine.cpp
     message.cpp
@@ -109,10 +110,11 @@ set(llmessage_SOURCE_FILES
 set(llmessage_HEADER_FILES
     CMakeLists.txt
 
+    aiaverage.h
     aicurl.h
     aicurleasyrequeststatemachine.h
+    aicurlperservice.h
     aicurlprivate.h
-    aicurlperhost.h
     aicurlthread.h
     aihttpheaders.h
     aihttptimeout.h
@@ -166,8 +168,8 @@ set(llmessage_HEADER_FILES
     llpacketbuffer.h
     llpacketring.h
     llpartdata.h
-    llpumpio.h
     llproxy.h
+    llpumpio.h
     llqueryflags.h
     llregionflags.h
     llregionhandle.h
@@ -193,10 +195,10 @@ set(llmessage_HEADER_FILES
     lluseroperation.h
     llvehicleparams.h
     llxfer.h
-    llxfermanager.h
     llxfer_file.h
     llxfer_mem.h
     llxfer_vfile.h
+    llxfermanager.h
     llxorcipher.h
     machine.h
     mean_collision_data.h

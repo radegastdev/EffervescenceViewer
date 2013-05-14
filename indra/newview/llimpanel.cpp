@@ -1123,7 +1123,7 @@ LLFloaterIMPanel::LLFloaterIMPanel(
 	{
 		llwarns << "Other participant is NULL" << llendl;
 	}
-		
+
 	init(session_label);
 }
 
@@ -1160,7 +1160,7 @@ LLFloaterIMPanel::LLFloaterIMPanel(
 	{
 		llwarns << "Other participant is NULL" << llendl;
 	}
-    
+
 	mSessionInitialTargetIDs = ids;
 	init(session_label);
 }
@@ -1173,9 +1173,9 @@ void LLFloaterIMPanel::init(const std::string& session_label)
 
 	mSessionLabel = session_label;
 
-    // [Ansariel: Display name support]
-    mProfileButtonEnabled = FALSE;
-    // [/Ansariel: Display name support]
+	// [Ansariel: Display name support]
+	mProfileButtonEnabled = FALSE;
+	// [/Ansariel: Display name support]
 
 	static LLCachedControl<bool> concise_im("UseConciseIMButtons");
 	static LLCachedControl<bool> concise_group("UseConciseGroupChatButtons");
@@ -1356,18 +1356,25 @@ BOOL LLFloaterIMPanel::postBuild()
 		mInputEditor->setRevertOnEsc( FALSE );
 		mInputEditor->setReplaceNewlinesWithSpaces( FALSE );
 
-		childSetAction("profile_callee_btn", onClickProfile, this);
-		childSetAction("profile_tele_btn", onClickTeleport, this);
-		childSetAction("group_info_btn", onClickGroupInfo, this);
+		if (LLButton* btn = findChild<LLButton>("profile_callee_btn"))
+		{
+			btn->setCommitCallback(boost::bind(&LLFloaterIMPanel::onClickProfile, this));
+			if (!mProfileButtonEnabled) btn->setEnabled(false);
+		}
+		if (LLButton* btn = findChild<LLButton>("profile_tele_btn"))
+			btn->setCommitCallback(boost::bind(&LLFloaterIMPanel::onClickTeleport, this));
+		if (LLButton* btn = findChild<LLButton>("group_info_btn"))
+			btn->setCommitCallback(boost::bind(&LLFloaterIMPanel::onClickGroupInfo, this));
 		childSetAction("history_btn", onClickHistory, this);
-		childSetCommitCallback("rp_mode", onRPMode, this);
+		if (LLUICtrl* ctrl = findChild<LLUICtrl>("rp_mode"))
+			ctrl->setCommitCallback(boost::bind(&LLFloaterIMPanel::onRPMode, this, _2));
 
 		childSetAction("start_call_btn", onClickStartCall, this);
 		childSetAction("end_call_btn", onClickEndCall, this);
 		childSetAction("send_btn", onClickSend, this);
-		childSetAction("toggle_active_speakers_btn", onClickToggleActiveSpeakers, this);
+		if (LLButton* btn = findChild<LLButton>("toggle_active_speakers_btn"))
+			btn->setCommitCallback(boost::bind(&LLFloaterIMPanel::onClickToggleActiveSpeakers, this, _2));
 
-		childSetAction("moderator_kick_speaker", onKickSpeaker, this);
 		//LLButton* close_btn = getChild<LLButton>("close_btn");
 		//close_btn->setClickedCallback(&LLFloaterIMPanel::onClickClose, this);
 
@@ -1380,11 +1387,6 @@ BOOL LLFloaterIMPanel::postBuild()
 			childSetEnabled("profile_btn", FALSE);
 		}
 		
-		if(!mProfileButtonEnabled)
-		{
-			childSetEnabled("profile_callee_btn", FALSE);
-		}
-
 		sTitleString = getString("title_string");
 		sTypingStartString = getString("typing_start_string");
 		sSessionStartString = getString("session_start_string");
@@ -1402,8 +1404,6 @@ BOOL LLFloaterIMPanel::postBuild()
 
 		setDefaultBtn("send_btn");
 
-		mActiveSpeakersPanel.connect(this,"active_speakers_panel");
-		mToggleActiveSpeakersBtn.connect(this,"toggle_active_speakers_btn");
 		mVolumeSlider.connect(this,"speaker_volume");
 		mEndCallBtn.connect(this,"end_call_btn");
 		mStartCallBtn.connect(this,"start_call_btn");
@@ -1496,10 +1496,11 @@ void LLFloaterIMPanel::draw()
 	// show speakers window when voice first connects
 	if (mShowSpeakersOnConnect && mVoiceChannel->isActive())
 	{
-		mActiveSpeakersPanel->setVisible(true);
+		childSetVisible("active_speakers_panel", true);
 		mShowSpeakersOnConnect = FALSE;
 	}
-	mToggleActiveSpeakersBtn->setValue(mActiveSpeakersPanel->getVisible());
+	if (LLUICtrl* ctrl = findChild<LLUICtrl>("toggle_active_speakers_btn"))
+		ctrl->setValue(getChildView("active_speakers_panel")->getVisible());
 
 	if (mTyping)
 	{
@@ -1609,25 +1610,25 @@ void LLFloaterIMPanel::addHistoryLine(const std::string &utf8msg, LLColor4 incol
 	static const LLCachedControl<bool> mKeywordsChangeColor(gSavedPerAccountSettings, "KeywordsChangeColor", false);
 	static const LLCachedControl<LLColor4> mKeywordsColor(gSavedPerAccountSettings, "KeywordsColor", LLColor4(1.f, 1.f, 1.f, 1.f));
 
-    if (gAgent.getID() != source)
+	if (gAgentID != source)
 	{
 		if (mKeywordsChangeColor)
 		{
-    		if (AscentKeyword::hasKeyword(utf8msg, 2))
-            {
+			if (AscentKeyword::hasKeyword(utf8msg, 2))
+			{
 				incolor = mKeywordsColor;
-            }
+			}
 		}
 	}
 
 	const LLColor4& color = incolor;
 	// start tab flashing when receiving im for background session from user
-	if (source != LLUUID::null)
+	if (source.notNull())
 	{
 		LLMultiFloater* hostp = getHost();
 		if( !isInVisibleChain() 
 			&& hostp 
-			&& source != gAgent.getID())
+			&& source != gAgentID)
 		{
 			hostp->setFloaterFlashing(this, TRUE);
 		}
@@ -1639,14 +1640,15 @@ void LLFloaterIMPanel::addHistoryLine(const std::string &utf8msg, LLColor4 incol
 	removeTypingIndicator(NULL);
 
 	// Actually add the line
-	std::string timestring;
 	bool prepend_newline = true;
 	if (gSavedSettings.getBOOL("IMShowTimestamps"))
 	{
-		timestring = mHistoryEditor->appendTime(prepend_newline);
+		mHistoryEditor->appendTime(prepend_newline);
 		prepend_newline = false;
 	}
 
+	std::string show_name = name;
+	bool is_irc = false;
 	// 'name' is a sender name that we want to hotlink so that clicking on it opens a profile.
 	if (!name.empty()) // If name exists, then add it to the front of the message.
 	{
@@ -1657,40 +1659,36 @@ void LLFloaterIMPanel::addHistoryLine(const std::string &utf8msg, LLColor4 incol
 		}
 		else
 		{
-			std::string show_name = name;
+			// IRC style text starts with a colon here; empty names and system messages aren't irc style.
+			static const LLCachedControl<bool> italicize("LiruItalicizeActions");
+			is_irc = italicize && utf8msg[0] != ':';
 			if (source.notNull())
 				LLAvatarNameCache::getPNSName(source, show_name);
 			// Convert the name to a hotlink and add to message.
-			const LLStyleSP &source_style = LLStyleMap::instance().lookupAgent(source);
+			LLStyleSP source_style = LLStyleMap::instance().lookupAgent(source);
+			source_style->mItalic = is_irc;
 			mHistoryEditor->appendStyledText(show_name,false,prepend_newline,source_style);
 		}
 		prepend_newline = false;
 	}
 
-	//Kadah - Bold group mods chat. Doesnt work on the first msg of the session, dont have speakers list yet?
-	if (gSavedSettings.getBOOL("SingularityBoldGroupModerator") && isModerator(source))
+	// Append the chat message in style
 	{
-		mHistoryEditor->appendColoredText(utf8msg.substr(0,1), false, prepend_newline, color);
 		LLStyleSP style(new LLStyle);
-		style->setVisible(true);
 		style->setColor(color);
-		style->setFontName(LLStringUtil::null);
-		style->mBold = TRUE;
-		mHistoryEditor->appendStyledText(utf8msg.substr(1), false, prepend_newline, style);
+		style->mItalic = is_irc;
+		style->mBold = gSavedSettings.getBOOL("SingularityBoldGroupModerator") && isModerator(source);
+		mHistoryEditor->appendStyledText(utf8msg, false, prepend_newline, style);
 	}
-	else
-	{
-		mHistoryEditor->appendColoredText(utf8msg, false, prepend_newline, color);
-	}
-	
+
 	if (log_to_file
 		&& gSavedPerAccountSettings.getBOOL("LogInstantMessages") ) 
 	{
 		std::string histstr;
 		if (gSavedPerAccountSettings.getBOOL("IMLogTimestamp"))
-			histstr = LLLogChat::timestamp(gSavedPerAccountSettings.getBOOL("LogTimestampDate")) + name + utf8msg;
+			histstr = LLLogChat::timestamp(gSavedPerAccountSettings.getBOOL("LogTimestampDate")) + show_name + utf8msg;
 		else
-			histstr = name + utf8msg;
+			histstr = show_name + utf8msg;
 
 		// [Ansariel: Display name support]
 		// Floater title contains display name -> bad idea to use that as filename
@@ -1705,7 +1703,7 @@ void LLFloaterIMPanel::addHistoryLine(const std::string &utf8msg, LLColor4 incol
 		mNumUnreadMessages++;
 	}
 
-	if (source != LLUUID::null)
+	if (source.notNull())
 	{
 		mSpeakers->speakerChatted(source);
 		mSpeakers->setSpeakerTyping(source, FALSE);
@@ -1721,12 +1719,6 @@ void LLFloaterIMPanel::setVisible(BOOL b)
 	if( b && hostp )
 	{
 		hostp->setFloaterFlashing(this, FALSE);
-
-		/* Don't change containing floater title - leave it "Instant Message" JC
-		LLUIString title = sTitleString;
-		title.setArg("[NAME]", mSessionLabel);
-		hostp->setTitle( title );
-		*/
 	}
 }
 
@@ -1884,37 +1876,28 @@ void LLFloaterIMPanel::onTabClick(void* userdata)
 }
 
 
-// static
-void LLFloaterIMPanel::onClickProfile( void* userdata )
+void LLFloaterIMPanel::onClickProfile()
 {
 	//  Bring up the Profile window
-	LLFloaterIMPanel* self = (LLFloaterIMPanel*) userdata;
-	
-	if (self->mOtherParticipantUUID.notNull())
+	if (mOtherParticipantUUID.notNull())
 	{
-		LLFloaterAvatarInfo::showFromDirectory(self->getOtherParticipantID());
+		LLFloaterAvatarInfo::showFromDirectory(mOtherParticipantUUID);
 	}
 }
 
-//static
-void LLFloaterIMPanel::onClickTeleport( void* userdata )
+void LLFloaterIMPanel::onClickTeleport()
 {
-	//  Bring up the Profile window
-	LLFloaterIMPanel* self = (LLFloaterIMPanel*) userdata;
-	
-	if (self->mOtherParticipantUUID.notNull())
+	if (mOtherParticipantUUID.notNull())
 	{
-		handle_lure(self->getOtherParticipantID());
+		handle_lure(mOtherParticipantUUID);
 		//do a teleport to other part id
-		//LLFloaterAvatarInfo::showFromDirectory(self->getOtherParticipantID());
+		//LLFloaterAvatarInfo::showFromDirectory(mOtherParticipantID);
 	}
 }
 
-// static
-void LLFloaterIMPanel::onRPMode(LLUICtrl* source, void* user_data)
+void LLFloaterIMPanel::onRPMode(const LLSD& value)
 {
-	LLFloaterIMPanel* self = (LLFloaterIMPanel*) user_data;
-	self->mRPMode = source->getValue().asBoolean();
+	mRPMode = value.asBoolean();
 }
 
 // static
@@ -1936,13 +1919,10 @@ void LLFloaterIMPanel::onClickHistory( void* userdata )
 	}
 }
 
-// static
-void LLFloaterIMPanel::onClickGroupInfo( void* userdata )
+void LLFloaterIMPanel::onClickGroupInfo()
 {
 	//  Bring up the Profile window
-	LLFloaterIMPanel* self = (LLFloaterIMPanel*) userdata;
-
-	LLFloaterGroupInfo::showFromUUID(self->mSessionUUID);
+	LLFloaterGroupInfo::showFromUUID(mSessionUUID);
 }
 
 // static
@@ -1978,12 +1958,9 @@ void LLFloaterIMPanel::onClickSend(void* userdata)
 	self->sendMsg();
 }
 
-// static
-void LLFloaterIMPanel::onClickToggleActiveSpeakers(void* userdata)
+void LLFloaterIMPanel::onClickToggleActiveSpeakers(const LLSD& value)
 {
-	LLFloaterIMPanel* self = (LLFloaterIMPanel*)userdata;
-
-	self->childSetVisible("active_speakers_panel", !self->childIsVisible("active_speakers_panel"));
+	childSetVisible("active_speakers_panel", !value);
 }
 
 // static
@@ -2062,17 +2039,16 @@ void deliver_message(const std::string& utf8_text,
 	bool sent = false;
 	gAgent.buildFullname(name);
 
-	const LLRelationship* info = NULL;
-	info = LLAvatarTracker::instance().getBuddyInfo(other_participant_id);
-	
+	const LLRelationship* info = LLAvatarTracker::instance().getBuddyInfo(other_participant_id);
+
 	U8 offline = (!info || info->isOnline()) ? IM_ONLINE : IM_OFFLINE;
-	
+
 	if((offline == IM_OFFLINE) && (LLVoiceClient::getInstance()->isOnlineSIP(other_participant_id)))
 	{
 		// User is online through the OOW connector, but not with a regular viewer.  Try to send the message via SLVoice.
 		sent = gVoiceClient->sendTextMessage(other_participant_id, utf8_text);
 	}
-	
+
 	if(!sent)
 	{
 		// Send message normally.
@@ -2141,59 +2117,56 @@ void LLFloaterIMPanel::sendMsg()
 			// store sent line in history, duplicates will get filtered
 			if (mInputEditor) mInputEditor->updateHistory();
 			// Truncate and convert to UTF8 for transport
-			std::string utf8text = wstring_to_utf8str(text);
+			std::string utf8_text = wstring_to_utf8str(text);
 			// Convert MU*s style poses into IRC emotes here.
-			if (gSavedSettings.getBOOL("AscentAllowMUpose") && utf8text.length() > 3 && utf8text[0] == ':')
+			if (gSavedSettings.getBOOL("AscentAllowMUpose") && utf8_text.length() > 3 && utf8_text[0] == ':')
 			{
-				if (utf8text[1] == '\'')
+				if (utf8_text[1] == '\'')
 				{
-					utf8text.replace(0, 1, "/me");
+					utf8_text.replace(0, 1, "/me");
  				}
-				else if (isalpha(utf8text[1]))	// Do not prevent smileys and such.
+				else if (isalpha(utf8_text[1]))	// Do not prevent smileys and such.
 				{
-					utf8text.replace(0, 1, "/me ");
+					utf8_text.replace(0, 1, "/me ");
 				}
 			}
-			if (utf8text.find("/ME'") == 0 || utf8text.find("/ME ") == 0)	//Allow CAPSlock /me
-				utf8text.replace(1, 2, "me");
-			std::string prefix = utf8text.substr(0, 4);
-			if (gSavedSettings.getBOOL("AscentAutoCloseOOC") && (utf8text.length() > 1) && !mRPMode)
+			if (utf8_text.find("/ME'") == 0 || utf8_text.find("/ME ") == 0)	//Allow CAPSlock /me
+				utf8_text.replace(1, 2, "me");
+			std::string prefix = utf8_text.substr(0, 4);
+			if (gSavedSettings.getBOOL("AscentAutoCloseOOC") && (utf8_text.length() > 1) && !mRPMode)
 			{
-				// Chalice - OOC autoclosing patch based on code by Henri Beauchamp
-				int needsClosingType=0;
 				//Check if it needs the end-of-chat brackets -HgB
-				if (utf8text.find("((") == 0 && utf8text.find("))") == std::string::npos)
+				if (utf8_text.find("((") == 0 && utf8_text.find("))") == std::string::npos)
 				{
-					if(*utf8text.rbegin() == ')')
-						utf8text+=" ";
-					utf8text+="))";
+					if(*utf8_text.rbegin() == ')')
+						utf8_text+=" ";
+					utf8_text+="))";
 				}
-				else if(utf8text.find("[[") == 0 && utf8text.find("]]") == std::string::npos)
+				else if(utf8_text.find("[[") == 0 && utf8_text.find("]]") == std::string::npos)
 				{
-					if(*utf8text.rbegin() == ']')
-						utf8text+=" ";
-					utf8text+="]]";
+					if(*utf8_text.rbegin() == ']')
+						utf8_text+=" ";
+					utf8_text+="]]";
 				}
-				//Check if it needs the start-of-chat brackets -HgB
-				needsClosingType=0;
+
 				if (prefix != "/me " && prefix != "/me'")   //Allow /me to end with )) or ]]
 				{
-					if (utf8text.find("((") == std::string::npos && utf8text.find("))") == (utf8text.length() - 2))
+					if (utf8_text.find("((") == std::string::npos && utf8_text.find("))") == (utf8_text.length() - 2))
 					{
-						if(utf8text[0] == '(')
-							utf8text.insert(0," ");
-						utf8text.insert(0,"((");
+						if(utf8_text[0] == '(')
+							utf8_text.insert(0," ");
+						utf8_text.insert(0,"((");
 					}
-					else if (utf8text.find("[[") == std::string::npos && utf8text.find("]]") == (utf8text.length() - 2))
+					else if (utf8_text.find("[[") == std::string::npos && utf8_text.find("]]") == (utf8_text.length() - 2))
 					{
-						if(utf8text[0] == '[')
-							utf8text.insert(0," ");
-						utf8text.insert(0,"[[");
+						if(utf8_text[0] == '[')
+							utf8_text.insert(0," ");
+						utf8_text.insert(0,"[[");
 					}
 				}
 			}
 			if (mRPMode && prefix != "/me " && prefix != "/me'")
-				utf8text = "[[" + utf8text + "]]";
+				utf8_text = "[[" + utf8_text + "]]";
 // [RLVa:KB] - Checked: 2011-09-17 (RLVa-1.1.4b) | Modified: RLVa-1.1.4b
 			if ( (gRlvHandler.hasBehaviour(RLV_BHVR_SENDIM)) || (gRlvHandler.hasBehaviour(RLV_BHVR_SENDIMTO)) )
 			{
@@ -2220,7 +2193,7 @@ void LLFloaterIMPanel::sendMsg()
 									itSpeaker != speakers.end(); ++itSpeaker)
 							{
 								const LLSpeaker* pSpeaker = *itSpeaker;
-								if ( (gAgent.getID() != pSpeaker->mID) && (!gRlvHandler.canSendIM(pSpeaker->mID)) )
+								if ( (gAgentID != pSpeaker->mID) && (!gRlvHandler.canSendIM(pSpeaker->mID)) )
 								{
 									fRlvFilter = true;
 									break;
@@ -2234,7 +2207,7 @@ void LLFloaterIMPanel::sendMsg()
 				}
 
 				if (fRlvFilter)
-					utf8text = RlvStrings::getString(RLV_STRING_BLOCKED_SENDIM);
+					utf8_text = RlvStrings::getString(RLV_STRING_BLOCKED_SENDIM);
 			}
 // [/RLVa:KB]
 
@@ -2243,7 +2216,7 @@ void LLFloaterIMPanel::sendMsg()
 				// Split messages that are too long, same code like in llimpanel.cpp
 				U32 split = MAX_MSG_BUF_SIZE - 1;
 				U32 pos = 0;
-				U32 total = utf8text.length();
+				U32 total = utf8_text.length();
 
 				while (pos < total)
 				{
@@ -2256,11 +2229,11 @@ void LLFloaterIMPanel::sendMsg()
 					else
 					{
 						// don't split utf-8 bytes
-						while (U8(utf8text[pos + next_split]) != 0x20	// space
-							&& U8(utf8text[pos + next_split]) != 0x21	// !
-							&& U8(utf8text[pos + next_split]) != 0x2C	// ,
-							&& U8(utf8text[pos + next_split]) != 0x2E	// .
-							&& U8(utf8text[pos + next_split]) != 0x3F	// ?
+						while (U8(utf8_text[pos + next_split]) != 0x20	// space
+							&& U8(utf8_text[pos + next_split]) != 0x21	// !
+							&& U8(utf8_text[pos + next_split]) != 0x2C	// ,
+							&& U8(utf8_text[pos + next_split]) != 0x2E	// .
+							&& U8(utf8_text[pos + next_split]) != 0x3F	// ?
 							&& next_split > 0)
 						{
 							--next_split;
@@ -2277,7 +2250,7 @@ void LLFloaterIMPanel::sendMsg()
 						}
 					}
 
-					std::string send = utf8text.substr(pos, next_split);
+					std::string send = utf8_text.substr(pos, next_split);
 					pos += next_split;
 LL_WARNS("Splitting") << "Pos: " << pos << " next_split: " << next_split << LL_ENDL;
 
@@ -2291,37 +2264,30 @@ LL_WARNS("Splitting") << "Pos: " << pos << " next_split: " << next_split << LL_E
 				if((mDialog == IM_NOTHING_SPECIAL) && 
 				   (mOtherParticipantUUID.notNull()))
 				{
-					std::string history_echo;
-					gAgent.buildFullname(history_echo);
+					std::string name;
+					gAgent.buildFullname(name);
 
 					// Look for IRC-style emotes here.
-					std::string prefix = utf8text.substr(0, 4);
+					std::string prefix = utf8_text.substr(0, 4);
 					if (prefix == "/me " || prefix == "/me'")
 					{
-						utf8text.replace(0,3,"");
+						utf8_text.replace(0,3,"");
 					}
 					else
 					{
-						history_echo += ": ";
-					}
-					history_echo += utf8text;
-
-					BOOL other_was_typing = mOtherTyping;
-
-					addHistoryLine(history_echo, gSavedSettings.getColor("IMChatColor"), true, gAgent.getID());
-
-					if (other_was_typing) 
-					{
-						addTypingIndicator(mOtherTypingName);
+						utf8_text.insert(0, ": ");
 					}
 
+					bool other_was_typing = mOtherTyping;
+					addHistoryLine(utf8_text, gSavedSettings.getColor("UserChatColor"), true, gAgentID, name);
+					if (other_was_typing) addTypingIndicator(mOtherTypingName);
 				}
 			}
 			else
 			{
 				//queue up the message to send once the session is
 				//initialized
-				mQueuedMsgsForInit.append(utf8text);
+				mQueuedMsgsForInit.append(utf8_text);
 			}
 		}
 
@@ -2457,6 +2423,7 @@ void LLFloaterIMPanel::sendTypingState(BOOL typing)
 		mSessionUUID);
 	gAgent.sendReliableMessage();
 }
+
 
 void LLFloaterIMPanel::processIMTyping(const LLIMInfo* im_info, BOOL typing)
 {
@@ -2596,23 +2563,16 @@ void LLFloaterIMPanel::showSessionForceClose(
 
 }
 
-//static 
-void LLFloaterIMPanel::onKickSpeaker(void* user_data)
-{
-
-}
-
 bool LLFloaterIMPanel::onConfirmForceCloseError(const LLSD& notification, const LLSD& response)
 {
 	//only 1 option really
 	LLUUID session_id = notification["payload"]["session_id"];
 
-	if ( gIMMgr )
+	if (gIMMgr)
 	{
-		LLFloaterIMPanel* floaterp = gIMMgr->findFloaterBySession(
-			session_id);
+		LLFloaterIMPanel* floaterp = gIMMgr->findFloaterBySession(session_id);
 
-		if ( floaterp ) floaterp->close(FALSE);
+		if (floaterp) floaterp->close(FALSE);
 	}
 	return false;
 }
@@ -2629,3 +2589,23 @@ const bool LLFloaterIMPanel::isModerator(const LLUUID& speaker_id)
 	return FALSE;
 }
 
+BOOL LLFloaterIMPanel::focusFirstItem(BOOL prefer_text_fields, BOOL focus_flash )
+{
+	if (getVisible() && mInputEditor->getVisible())
+	{
+		setInputFocus(true);
+		return TRUE;
+	}
+
+	return LLUICtrl::focusFirstItem(prefer_text_fields, focus_flash);
+}
+
+void LLFloaterIMPanel::onFocusReceived()
+{
+	if (getVisible() && mInputEditor->getVisible())
+	{
+		setInputFocus(true);
+	}
+
+	LLFloater::onFocusReceived();
+}

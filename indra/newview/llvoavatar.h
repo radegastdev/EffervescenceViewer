@@ -52,7 +52,6 @@
 #include "material_codes.h"		// LL_MCODE_END
 #include "llviewerstats.h"
 
-#include "emeraldboobutils.h"
 #include "llavatarname.h"
 
 extern const LLUUID ANIM_AGENT_BODY_NOISE;
@@ -292,7 +291,6 @@ public:
 	void			addNameTagLine(const std::string& line, const LLColor4& color, S32 style, const LLFontGL* font);
 	void 			idleUpdateRenderCost();
 	void 			idleUpdateBelowWater();
-	void 			idleUpdateBoobEffect();	//Emerald
 
 	//--------------------------------------------------------------------
 	// Static preferences (controlled by user settings/menus)
@@ -338,7 +336,6 @@ public:
 
 	S32				mLastRezzedStatus;
 
-	
 	void 			startPhase(const std::string& phase_name);
 	void 			stopPhase(const std::string& phase_name, bool err_check = true);
 	void			clearPhases();
@@ -373,6 +370,7 @@ protected:
 /**                    State
  **                                                                            **
  *******************************************************************************/
+
 /********************************************************************************
  **                                                                            **
  **                    SKELETON
@@ -580,7 +578,7 @@ protected:
 	//--------------------------------------------------------------------
 protected:
 	virtual void	setLocalTexture(LLAvatarAppearanceDefines::ETextureIndex type, LLViewerTexture* tex, BOOL baked_version_exits, U32 index = 0);
-	virtual void	addLocalTextureStats(LLAvatarAppearanceDefines::ETextureIndex type, LLViewerFetchedTexture* imagep, F32 texel_area_ratio, BOOL rendered, BOOL covered_by_baked, U32 index = 0);
+	virtual void	addLocalTextureStats(LLAvatarAppearanceDefines::ETextureIndex type, LLViewerFetchedTexture* imagep, F32 texel_area_ratio, BOOL rendered, BOOL covered_by_baked);
 	// MULTI-WEARABLE: make self-only?
 	virtual void	setBakedReady(LLAvatarAppearanceDefines::ETextureIndex type, BOOL baked_version_exists, U32 index = 0);
 
@@ -757,7 +755,6 @@ public:
 public:
 	BOOL 				hasHUDAttachment() const;
 	LLBBox 				getHUDBBox() const;
-	void 				rebuildHUD();
 	void 				resetHUDAttachments();
 	BOOL				canAttachMoreObjects() const;
 	BOOL				canAttachMoreObjects(U32 n) const;
@@ -769,17 +766,10 @@ protected:
 	//--------------------------------------------------------------------
 public:
 	BOOL 			isWearingAttachment( const LLUUID& inv_item_id );
-	// <edit> testzone attachpt
-	BOOL 			isWearingUnsupportedAttachment( const LLUUID& inv_item_id );
-	// </edit>
 	LLViewerObject* getWornAttachment( const LLUUID& inv_item_id );
 
 	const std::string getAttachedPointName(const LLUUID& inv_item_id);
 
-	// <edit>
-	std::map<S32, std::pair<LLUUID/*inv*/,LLUUID/*object*/> > mUnsupportedAttachmentPoints;
-	// </edit>
-	
 /**                    Wearables
  **                                                                            **
  *******************************************************************************/
@@ -824,6 +814,7 @@ public:
 	void			stopTyping() { mTyping = FALSE; mIdleTimer.reset();}
 private:
 	BOOL			mVisibleChat;
+	bool			mVisibleTyping;
 
 	//--------------------------------------------------------------------
 	// Lip synch morphs
@@ -871,31 +862,9 @@ private:
 	BOOL		mStepOnLand;
 	U8			mStepMaterial;
 	LLVector3	mStepObjectVelocity;
-	
-public:
-	bool mSupportsPhysics; //Client supports v2 wearable physics. Disable emerald physics.
 
-	//--------------------------------------------------------------------
-	// Emerald legacy boob bounce
-	//--------------------------------------------------------------------
 public:
-	F32				getActualBoobGrav() const { return mLocalBoobConfig.actualBoobGrav; }
-	void			setActualBoobGrav(F32 grav)
-	{
-		mLocalBoobConfig.actualBoobGrav = grav;
-		if(!mFirstSetActualBoobGravRan)
-		{
-			mBoobState.boobGrav = grav;
-			mFirstSetActualBoobGravRan = true;
-		}
-	}
-	static EmeraldGlobalBoobConfig sBoobConfig;
-private:
-	bool			mFirstSetActualBoobGravRan;
-	LLFrameTimer	mBoobBounceTimer;
-	EmeraldAvatarLocalBoobConfig mLocalBoobConfig;
-	EmeraldBoobState mBoobState;
-
+	bool		mHasPhysicsParameters; //If we receive no physics params from this av then reset and skip llphysicsmotion calculations.
 /**                    Physics
  **                                                                            **
  *******************************************************************************/
@@ -1091,6 +1060,4 @@ private:
 extern const F32 SELF_ADDITIONAL_PRI;
 extern const S32 MAX_TEXTURE_VIRTURE_SIZE_RESET_INTERVAL;
 
-extern const U32 EMERALD_BOOB_SIZE_PARAM;		//"Breast Size"
-extern const U32 EMERALD_BOOB_GRAVITY_PARAM;	//"Breast_Gravity"
 #endif // LL_VOAVATAR_H

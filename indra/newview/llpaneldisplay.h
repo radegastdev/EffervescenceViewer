@@ -93,7 +93,7 @@ protected:
 	LLCheckBoxCtrl	*mCtrlCustomSettings;
 
 	// performance sliders and boxes
-	LLViewBorder	*mGraphicsBorder;
+	//LLViewBorder	*mGraphicsBorder;
 
 	LLSliderCtrl	*mCtrlDrawDistance;				// the draw distance slider
 	LLSliderCtrl	*mCtrlLODFactor;				// LOD for volume objects
@@ -125,14 +125,12 @@ protected:
 
 	LLTextBox		*mAspectRatioLabel1;
 	LLTextBox		*mDisplayResLabel;
-	LLTextEditor	*mFullScreenInfo;
 	LLTextBox       *mWindowSizeLabel;
 	
 	LLTextBox		*mShaderText;
 	LLTextBox		*mReflectionText;
 	LLTextBox		*mAvatarText;
 	LLTextBox		*mTerrainText;
-	LLTextBox		*mLightingText;
 	LLTextBox		*mDrawDistanceMeterText1;
 	LLTextBox		*mDrawDistanceMeterText2;
 
@@ -147,6 +145,9 @@ protected:
 	LLTextBox		*mPostProcessText;
 	LLTextBox		*mShadowDetailText;
 	LLTextBox		*mTerrainScaleText;
+
+	LLCheckBoxCtrl	*mVBO;
+	LLCheckBoxCtrl	*mVBOStream;
 
 	BOOL mFSAutoDetectAspect;
 	F32 mAspectRatio;
@@ -194,32 +195,24 @@ protected:
 	S32 mVideoCardMem;
 	F32 mFogRatio;
 
-	static void setGraphicsSettings(LLControlGroup& group);
-	static void createGroup();
-
 	// if the quality radio buttons are changed
-	static void onChangeQuality(LLUICtrl *ctrl, void *data);
+	void onChangeQuality(LLUICtrl* caller);
 	
 	// if the custom settings box is clicked
-	static void onChangeCustom(LLUICtrl *ctrl, void *data);
+	static void onChangeCustom();
 	
-	static void onOpenHelp(void *data);
-	static void onCommitAutoDetectAspect(LLUICtrl *ctrl, void *data);
-	static void onKeystrokeAspectRatio(LLLineEditor* caller, void* user_data);
-	static void onSelectAspectRatio(LLUICtrl*, void*);
-	static void onCommitWindowedMode(LLUICtrl* ctrl, void *data);
-	static void onApplyResolution(LLUICtrl* ctrl, void* data);
-	static void updateSliderText(LLUICtrl* ctrl, void* user_data);
-	static void updateMeterText(LLUICtrl* ctrl, void* user_data);
+	void onCommitAutoDetectAspect(const LLSD& value);
+	static void onKeystrokeAspectRatio(LLLineEditor* caller, void *user_data);
+	void onSelectAspectRatio();
+	void onCommitWindowedMode();
+	static void updateSliderText(LLUICtrl* ctrl, LLTextBox* text_box);
+	void updateMeterText();
 
 	/// callback for defaults
-	static void setHardwareDefaults(void *data);
+	static void setHardwareDefaults();
 
 	// callback for when client turns on shaders
-	static void onVertexShaderEnable(LLUICtrl*, void*);
-
-	// callbacks for hardware tab
-	static void onRenderVBOEnable(LLUICtrl*, void*);
+	static void onVertexShaderEnable();
 
 	// helper function
 	static void fractionFromDecimal(F32 decimal_val, S32& numerator, S32& denominator);

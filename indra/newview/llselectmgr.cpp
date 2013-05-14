@@ -937,6 +937,8 @@ LLObjectSelectionHandle LLSelectMgr::setHoverObject(LLViewerObject *objectp, S32
 
 	mHoverObjects->mPrimaryObject = objectp; 
 
+	LLViewerObject* primary_obj = objectp;
+
 	objectp = objectp->getRootEdit();
 
 	// is the requested object the same as the existing hover object root?
@@ -961,6 +963,8 @@ LLObjectSelectionHandle LLSelectMgr::setHoverObject(LLViewerObject *objectp, S32
 
 		requestObjectPropertiesFamily(objectp);
 	}
+
+	mHoverObjects->mPrimaryObject = primary_obj;
 
 	return mHoverObjects;
 }
@@ -1205,7 +1209,6 @@ void LLSelectMgr::getGrid(LLVector3& origin, LLQuaternion &rotation, LLVector3 &
 	if (mGridMode == GRID_MODE_LOCAL && mSelectedObjects->getObjectCount())
 	{
 		//LLViewerObject* root = getSelectedParentObject(mSelectedObjects->getFirstObject());
-		LLBBox bbox = mSavedSelectionBBox;
 		mGridOrigin = mSavedSelectionBBox.getCenterAgent();
 		mGridScale = mSavedSelectionBBox.getExtentLocal() * 0.5f;
 
@@ -1223,7 +1226,6 @@ void LLSelectMgr::getGrid(LLVector3& origin, LLQuaternion &rotation, LLVector3 &
 	else if (mGridMode == GRID_MODE_REF_OBJECT && first_grid_object && first_grid_object->mDrawable.notNull())
 	{
 		mGridRotation = first_grid_object->getRenderRotation();
-		LLVector3 first_grid_obj_pos = first_grid_object->getRenderPosition();
 
 		LLVector4a min_extents(F32_MAX);
 		LLVector4a max_extents(-F32_MAX);

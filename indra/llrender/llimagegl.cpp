@@ -65,9 +65,9 @@ bool LLImageGL::sCompressTextures = false;
 
 std::set<LLImageGL*> LLImageGL::sImageList;
 
-// ****************************************************************************************************
+//****************************************************************************************************
 //The below for texture auditing use only
-// ****************************************************************************************************
+//****************************************************************************************************
 //-----------------------
 //debug use
 BOOL gAuditTexture = FALSE ;
@@ -482,7 +482,11 @@ void LLImageGL::init(BOOL usemipmaps)
 	mHasExplicitFormat = FALSE;
 	mAutoGenMips = FALSE;
 
+	mCanMask = TRUE;
 	mIsMask = FALSE;
+	mMaskRMSE = 1.f ;
+
+
 	mNeedsAlphaAndPickMask = TRUE ;
 	mAlphaStride = 0 ;
 	mAlphaOffset = 0 ;
@@ -816,8 +820,9 @@ void LLImageGL::setImage(const U8* data_in, BOOL data_hasmips)
 				S32 w = width, h = height;
 				const U8* prev_mip_data = 0;
 				const U8* cur_mip_data = 0;
-				S32 prev_mip_size = 0;
+#ifdef SHOW_ASSERT
 				S32 cur_mip_size = 0;
+#endif
 				
 				mMipLevels = nummips;
 
@@ -826,18 +831,24 @@ void LLImageGL::setImage(const U8* data_in, BOOL data_hasmips)
 					if (m==0)
 					{
 						cur_mip_data = data_in;
+#ifdef SHOW_ASSERT
 						cur_mip_size = width * height * mComponents; 
+#endif
 					}
 					else
 					{
 						S32 bytes = w * h * mComponents;
+#ifdef SHOW_ASSERT
 						llassert(prev_mip_data);
-						llassert(prev_mip_size == bytes*4);
+						llassert(cur_mip_size == bytes*4);
+#endif
 						U8* new_data = new U8[bytes];
 						llassert_always(new_data);
 						LLImageBase::generateMip(prev_mip_data, new_data, w, h, mComponents);
 						cur_mip_data = new_data;
+#ifdef SHOW_ASSERT
 						cur_mip_size = bytes; 
+#endif
 					}
 					llassert(w > 0 && h > 0 && cur_mip_data);
 					{
@@ -870,7 +881,6 @@ void LLImageGL::setImage(const U8* data_in, BOOL data_hasmips)
 						delete[] prev_mip_data;
 					}
 					prev_mip_data = cur_mip_data;
-					prev_mip_size = cur_mip_size;
 					w >>= 1;
 					h >>= 1;
 				}
@@ -1743,7 +1753,7 @@ void LLImageGL::setNeedsAlphaAndPickMask(BOOL need_mask)
 		else //do not need alpha mask
 		{
 			mAlphaOffset = INVALID_OFFSET ;
-			mIsMask = FALSE;
+			mCanMask = FALSE;
 		}
 	}
 }
@@ -1767,7 +1777,7 @@ void LLImageGL::calcAlphaChannelOffsetAndStride()
 		break;
 	case GL_RGB:
 		mNeedsAlphaAndPickMask = FALSE ;
-		mIsMask = FALSE;
+		mCanMask = FALSE;
 		return ; //no alpha channel.
 	case GL_RGBA:
 		mAlphaStride = 4;
@@ -1814,16 +1824,19 @@ void LLImageGL::calcAlphaChannelOffsetAndStride()
 		llwarns << "Cannot analyze alpha for image with format type " << std::hex << mFormatType << std::dec << llendl;
 
 		mNeedsAlphaAndPickMask = FALSE ;
-		mIsMask = FALSE;
+		mCanMask = FALSE;
 	}
 }
 
+std::map<LLGLuint, std::list<std::pair<std::string,std::string> > > sTextureMaskMap;
 void LLImageGL::analyzeAlpha(const void* data_in, U32 w, U32 h)
 {
-	if(!mNeedsAlphaAndPickMask)
+	if(!mNeedsAlphaAndPickMask || !mCanMask)
 	{
 		return ;
 	}
+
+	F64 sum = 0;
 
 	U32 length = w * h;
 	U32 alphatotal = 0;
@@ -1865,11 +1878,19 @@ void LLImageGL::analyzeAlpha(const void* data_in, U32 w, U32 h)
 				const U32 asum = (s1+s2+s3+s4);
 				alphatotal += asum;
 				sample[asum/(16*4)] += 4;
+
+				S32 avg = (s1+s2+s3+s4)/4;
+				if(avg >=128)
+				{
+					avg-=255;
+				}
+				sum+=F64(avg*avg*4)/F64(length);
 			}
 			
 			
 			rowstart += 2 * w * mAlphaStride;
 		}
+
 		length *= 2; // we sampled everything twice, essentially
 	}
 	else
@@ -1881,9 +1902,17 @@ void LLImageGL::analyzeAlpha(const void* data_in, U32 w, U32 h)
 			alphatotal += s1;
 			++sample[s1/16];
 			current += mAlphaStride;
+
+			if(i%2==0)
+			{
+				S32 avg = (s1+current[mAlphaStride])/2;
+				if(avg >=128)
+					avg-=255;
+				sum+=F64(avg*avg*2)/F64(length);
+			}
 		}
 	}
-	
+
 	// if more than 1/16th of alpha samples are mid-range, this
 	// shouldn't be treated as a 1-bit mask
 
@@ -1892,7 +1921,7 @@ void LLImageGL::analyzeAlpha(const void* data_in, U32 w, U32 h)
 	// this to be an intentional effect and don't treat as a mask.
 
 	U32 midrangetotal = 0;
-	for (U32 i = 2; i < 13; i++)
+	for (U32 i = 3; i < 13; i++)
 	{
 		midrangetotal += sample[i];
 	}
@@ -1917,6 +1946,22 @@ void LLImageGL::analyzeAlpha(const void* data_in, U32 w, U32 h)
 	{
 		mIsMask = TRUE;
 	}
+
+	mMaskRMSE = sqrt(sum)/255.0;
+	
+	std::list<std::pair<std::string,std::string> > &data = sTextureMaskMap[getTexName()];
+	data.clear();
+	data.push_back(std::make_pair("RMSE", llformat("%f",mMaskRMSE)));
+	data.push_back(std::make_pair(" sum", llformat("%lf",sum)));
+	data.push_back(std::make_pair(" n", llformat("%u",h*w)));
+	data.push_back(std::make_pair("legacymask", mIsMask ? "TRUE" : "FALSE"));
+	data.push_back(std::make_pair(" index", llformat("%u",getTexName())));
+	data.push_back(std::make_pair(" length", llformat("%u",length)));
+	data.push_back(std::make_pair(" stride", llformat("%i",S32(mAlphaOffset))));
+	data.push_back(std::make_pair(" split", llformat("%u|%u|%u",lowerhalftotal,midrangetotal,upperhalftotal)));
+	data.push_back(std::make_pair(" alphatotal", llformat("%u",alphatotal)));
+	data.push_back(std::make_pair(" alphatotal/48", llformat("%u",length/48)));
+	
 }
 
 //----------------------------------------------------------------------------

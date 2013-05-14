@@ -88,10 +88,6 @@
 
 #include "lltrans.h"
 
-// <edit>
-#include "llviewercontrol.h"
-// </edit>
-
 // [RLVa:KB]
 #include "rlvhandler.h"
 // [/RLVa:KB]
@@ -270,11 +266,6 @@ void LLFloaterReporter::draw()
 void LLFloaterReporter::enableControls(BOOL enable)
 {
 	childSetEnabled("category_combo", enable);
-	// bug reports never include the chat history
-	if (mReportType != BUG_REPORT)
-	{
-		childSetEnabled("chat_check", enable);
-	}
 	childSetEnabled("screen_check",	enable);
 	childDisable("screenshot");
 	childSetEnabled("pick_btn",		enable);
@@ -635,6 +626,11 @@ bool LLFloaterReporter::validateReport()
 	// Ensure user selected a category from the list
 	LLSD category_sd = childGetValue("category_combo");
 	U8 category = (U8)category_sd.asInteger();
+	if(category >= 100) //This is here for reasons (like shenanigans)
+	{
+		LLNotificationsUtil::add("HelpReportNope");
+		return false;
+	}
 	if (category == 0)
 	{
 		if ( mReportType != BUG_REPORT )

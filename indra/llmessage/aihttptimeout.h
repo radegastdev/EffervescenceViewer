@@ -77,34 +77,43 @@ class HTTPTimeout : public LLRefCount {
 	AIHTTPTimeoutPolicy const* mPolicy;			// A pointer to the used timeout policy.
 	std::vector<U32> mBuckets;					// An array with the number of bytes transfered in each second.
 	U16 mBucket;								// The bucket corresponding to mLastSecond.
-	bool mNothingReceivedYet;					// Set when created, reset when the HTML reply header from the server is received.
+	bool mNothingReceivedYet;					// Set when created, reset when the first HTML reply header from the server is received.
 	bool mLowSpeedOn;							// Set while uploading or downloading data.
+	bool mLastBytesSent;						// Set when the last bytes were sent to libcurl to be uploaded.
+	bool mBeingRedirected;						// Set when a 302 header is received, reset when upload finished is detected.
 	bool mUploadFinished;						// Used to keep track of whether upload_finished was called yet.
 	S32 mLastSecond;							// The time at which lowspeed() was last called, in seconds since mLowSpeedClock.
 	S32 mOverwriteSecond;						// The second at which the first bucket of this transfer will be overwritten.
 	U32 mTotalBytes;							// The sum of all bytes in mBuckets.
-	U64 mLowSpeedClock;							// Clock count at which low speed detection (re)started.
-	U64 mStalled;								// The clock count at which this transaction is considered to be stalling if nothing is transfered anymore.
+	U64 mLowSpeedClock;							// The time (sTime_10ms) at which low speed detection (re)started.
+	U64 mStalled;								// The time (sTime_10ms) at which this transaction is considered to be stalling if nothing is transfered anymore.
   public:
-	static F64 const sClockWidth;				// Time between two clock ticks in seconds.
-	static U64 sClockCount;						// Clock count used as 'now' during one loop of the main loop.
+	static F64 const sClockWidth_10ms;			// Time between two clock ticks in 10 ms units.
+	static F64 const sClockWidth_40ms;			// Time between two clock ticks in 40 ms units.
+	static U64 sTime_10ms;						// Time since the epoch in 10 ms units.
 #if defined(CWDEBUG) || defined(DEBUG_CURLIO)
 	ThreadSafeBufferedCurlEasyRequest* mLockObj;
 #endif
 
   public:
 	HTTPTimeout(AIHTTPTimeoutPolicy const* policy, ThreadSafeBufferedCurlEasyRequest* lock_obj) :
-		mPolicy(policy), mNothingReceivedYet(true), mLowSpeedOn(false), mUploadFinished(false), mStalled((U64)-1)
+		mPolicy(policy), mNothingReceivedYet(true), mLowSpeedOn(false), mLastBytesSent(false), mBeingRedirected(false), mUploadFinished(false), mStalled((U64)-1)
 #if defined(CWDEBUG) || defined(DEBUG_CURLIO)
 		, mLockObj(lock_obj)
 #endif
 		{ }
 
+	// Called when a redirect header is received.
+	void being_redirected(void);
+
+	// Called when curl makes the socket writable (again).
+	void upload_starting(void);
+
 	// Called when everything we had to send to the server has been sent.
 	void upload_finished(void);
 
 	// Called when data is sent. Returns true if transfer timed out.
-	bool data_sent(size_t n);
+	bool data_sent(size_t n, bool finished);
 
 	// Called when data is received. Returns true if transfer timed out.
 	bool data_received(size_t n/*,*/ ASSERT_ONLY_COMMA(bool upload_error_status = false));
@@ -112,8 +121,8 @@ class HTTPTimeout : public LLRefCount {
 	// Called immediately before done() after curl finished, with code.
 	void done(AICurlEasyRequest_wat const& curlEasyRequest_w, CURLcode code);
 
-	// Accessor.
-	bool has_stalled(void) const { return mStalled < sClockCount;  }
+	// Returns true when we REALLY timed out. Might call upload_finished heuristically.
+	bool has_stalled(void) { return mStalled < sTime_10ms && !maybe_upload_finished(); }
 
 	// Called from BufferedCurlEasyRequest::processOutput if a timeout occurred.
 	void print_diagnostics(CurlEasyRequest const* curl_easy_request, char const* eff_url);
@@ -127,11 +136,19 @@ class HTTPTimeout : public LLRefCount {
 	void reset_lowspeed(void);
 
 	// Common low speed detection, Called from data_sent or data_received.
-	bool lowspeed(size_t bytes);
+	bool lowspeed(size_t bytes, bool finished = false);
+
+	// Return false when we timed out on reply delay, or didn't sent all bytes yet.
+	// Otherwise calls upload_finished() and return true;
+	bool maybe_upload_finished(void);
 };
 
 } // namespace curlthread
 } // namespace AICurlPrivate
+
+#if defined(CWDEBUG) || defined(DEBUG_CURLIO)
+extern bool gCurlIo;
+#endif
 
 #endif
 

@@ -169,8 +169,6 @@ LLAvatarAppearance::LLAvatarAppearance(LLWearableData* wearable_data) :
 	mRoot(NULL),
 	mWearableData(wearable_data)
 {
-	LLMemType mt(LLMemType::MTYPE_AVATAR);
-
 	llassert_always(mWearableData);
 	mBakedTextureDatas.resize(LLAvatarAppearanceDefines::BAKED_NUM_INDICES);
 	for (U32 i = 0; i < mBakedTextureDatas.size(); i++ )
@@ -465,6 +463,10 @@ void LLAvatarAppearance::computeBodySize()
 
 	LLVector3 foot  = mFootLeftp->getPosition();
 
+	LLVector3 old_offset = mAvatarOffset;
+
+	mAvatarOffset.mV[VZ] = getVisualParamWeight(AVATAR_HOVER);
+
 	mPelvisToFoot = hip.mV[VZ] * pelvis_scale.mV[VZ] -
 				 	knee.mV[VZ] * hip_scale.mV[VZ] -
 				 	ankle.mV[VZ] * knee_scale.mV[VZ] -
@@ -484,7 +486,29 @@ void LLAvatarAppearance::computeBodySize()
 	new_body_size.mV[VX] = DEFAULT_AGENT_DEPTH;
 	new_body_size.mV[VY] = DEFAULT_AGENT_WIDTH;
 
-	if (new_body_size != mBodySize)
+	mAvatarOffset.mV[VX] = 0.0f;
+	mAvatarOffset.mV[VY] = 0.0f;
+
+	// Certain configurations of avatars can force the overall height (with offset) to go negative.
+	// Enforce a constraint to make sure we don't go below 0.1 meters.
+	// Camera positioning and other things start to break down when your avatar is "walking" while being fully underground
+	if (new_body_size.mV[VZ] + mAvatarOffset.mV[VZ] < 0.1f) 
+	{
+		mAvatarOffset.mV[VZ] = -(new_body_size.mV[VZ] - 0.11f); // avoid floating point rounding making the above check continue to fail.
+
+		llassert(new_body_size.mV[VZ] + mAvatarOffset.mV[VZ] >= 0.1f);
+
+		if (mWearableData && isSelf()) 
+		{
+			LLWearable* shape = mWearableData->getWearable(LLWearableType::WT_SHAPE, 0);
+			if (shape) 
+			{
+				shape->setVisualParamWeight(AVATAR_HOVER, mAvatarOffset.mV[VZ], false);
+			}
+		}
+	}
+
+	if (new_body_size != mBodySize || old_offset != mAvatarOffset)
 	{
 		mBodySize = new_body_size;
 		bodySizeChanged();
@@ -496,8 +520,6 @@ void LLAvatarAppearance::computeBodySize()
 //-----------------------------------------------------------------------------
 BOOL LLAvatarAppearance::parseSkeletonFile(const std::string& filename)
 {
-	LLMemType mt(LLMemType::MTYPE_AVATAR);
-	
 	//-------------------------------------------------------------------------
 	// parse the file
 	//-------------------------------------------------------------------------
@@ -539,8 +561,6 @@ BOOL LLAvatarAppearance::parseSkeletonFile(const std::string& filename)
 //-----------------------------------------------------------------------------
 BOOL LLAvatarAppearance::setupBone(const LLAvatarBoneInfo* info, LLJoint* parent, S32 &volume_num, S32 &joint_num)
 {
-	LLMemType mt(LLMemType::MTYPE_AVATAR);
-	
 	LLJoint* joint = NULL;
 
 	if (info->mIsJoint)
@@ -628,9 +648,6 @@ BOOL LLAvatarAppearance::allocateCharacterJoints( U32 num )
 //-----------------------------------------------------------------------------
 BOOL LLAvatarAppearance::buildSkeleton(const LLAvatarSkeletonInfo *info)
 {
-	LLMemType mt(LLMemType::MTYPE_AVATAR);
-	
-
 	if (!info)
 		return FALSE;
 	//-------------------------------------------------------------------------
@@ -685,8 +702,6 @@ void LLAvatarAppearance::clearSkeleton()
 //-----------------------------------------------------------------------------
 void LLAvatarAppearance::buildCharacter()
 {
-	LLMemType mt(LLMemType::MTYPE_AVATAR);
-	
 	//-------------------------------------------------------------------------
 	// remove all references to our existing skeleton
 	// so we can rebuild it
@@ -1471,6 +1486,7 @@ LLColor4 LLAvatarAppearance::getClothesColor( ETextureIndex te )
 	}
 	return color;
 }
+
 // static
 LLColor4 LLAvatarAppearance::getDummyColor()
 {

@@ -145,7 +145,7 @@ BOOL	LLPanelObject::postBuild()
 	//--------------------------------------------------------
 	
 	// Build constant tipsheet
-	childSetAction("build_math_constants",onClickBuildConstants,this);
+	//childSetAction("build_math_constants",onClickBuildConstants,this);
 
 	// Lock checkbox
 	mCheckLock = getChild<LLCheckBoxCtrl>("checkbox locked");
@@ -471,7 +471,6 @@ void LLPanelObject::getState( )
 	BOOL enable_scale	= objectp->permMove() && !objectp->isPermanentEnforced() && ((root_objectp == NULL) || !root_objectp->isPermanentEnforced()) && objectp->permModify();
 	BOOL enable_rotate	= objectp->permMove() && !objectp->isPermanentEnforced() && ((root_objectp == NULL) || !root_objectp->isPermanentEnforced()) && ( (objectp->permModify() && !objectp->isAttachment()) || !gSavedSettings.getBOOL("EditLinkedParts"));
 
-	childSetEnabled("build_math_constants",true);
 	S32 selected_count = LLSelectMgr::getInstance()->getSelection()->getObjectCount();
 	BOOL single_volume = (LLSelectMgr::getInstance()->selectionAllPCode( LL_PCODE_VOLUME ))
 						 && (selected_count == 1);
@@ -2295,8 +2294,6 @@ void LLPanelObject::clearCtrls()
 	childSetEnabled("advanced_cut", FALSE);
 	childSetEnabled("advanced_dimple", FALSE);
 	childSetVisible("advanced_slice", FALSE);
-
-	childSetEnabled("build_math_constants",false);
 }
 
 //
@@ -2493,6 +2490,18 @@ void LLPanelObject::onCopyRot(void* user_data)
 	gViewerWindow->mWindow->copyTextToClipboard(utf8str_to_wstring(stringVec));
 }
 
+namespace
+{
+	bool texturePermsCheck(const LLUUID& id)
+	{
+		return (id.notNull() && !gInventory.isObjectDescendentOf(id, gInventory.getLibraryRootFolderID())
+			&& id != LLUUID(gSavedSettings.getString("UIImgWhiteUUID"))
+			&& id != LLUUID(gSavedSettings.getString("UIImgInvisibleUUID"))
+			&& id != LLUUID(std::string("8dcd4a48-2d37-4909-9f78-f7a9eb4ef903")) // alpha
+			&& LLPanelObject::findItemID(id).isNull());
+	}
+}
+
 void LLPanelObject::onCopyParams(void* user_data)
 {
 	LLPanelObject* self = (LLPanelObject*) user_data;
@@ -2503,36 +2512,19 @@ void LLPanelObject::onCopyParams(void* user_data)
 
 	LLViewerObject* objp = self->mObject;
 
-	mClipboardFlexiParams = (LLFlexibleObjectData*)objp->getParameterEntry(LLNetworkData::PARAMS_FLEXIBLE);
-	mClipboardLightParams = (LLLightParams*)objp->getParameterEntry(LLNetworkData::PARAMS_LIGHT);
-	mClipboardSculptParams = (LLSculptParams*)objp->getParameterEntry(LLNetworkData::PARAMS_SCULPT);
+	mClipboardFlexiParams = objp->getParameterEntryInUse(LLNetworkData::PARAMS_FLEXIBLE) ? static_cast<LLFlexibleObjectData*>(objp->getParameterEntry(LLNetworkData::PARAMS_FLEXIBLE)) : NULL;
+	mClipboardLightParams = objp->getParameterEntryInUse(LLNetworkData::PARAMS_LIGHT) ? static_cast<LLLightParams*>(objp->getParameterEntry(LLNetworkData::PARAMS_LIGHT)) : NULL;
+	mClipboardSculptParams = objp->getParameterEntryInUse(LLNetworkData::PARAMS_SCULPT) ? static_cast<LLSculptParams*>(objp->getParameterEntry(LLNetworkData::PARAMS_SCULPT)) : NULL;
 	if (mClipboardSculptParams)
 	{
-		LLUUID id = mClipboardSculptParams->getSculptTexture();
-
-		// Texture perms check
-		if (!(id.isNull() || gInventory.isObjectDescendentOf(id, gInventory.getLibraryRootFolderID())
-			 || id == LLUUID(gSavedSettings.getString("UIImgWhiteUUID"))
-			 || id == LLUUID(gSavedSettings.getString("UIImgInvisibleUUID"))
-			 || id == LLUUID(std::string("8dcd4a48-2d37-4909-9f78-f7a9eb4ef903"))) // alpha
-			&& findItemID(id).isNull())
-		{
-			mClipboardSculptParams->setSculptTexture(LLUUID(SCULPT_DEFAULT_TEXTURE));
-		}
+		const LLUUID id = mClipboardSculptParams->getSculptTexture();
+		if (id != LLUUID(SCULPT_DEFAULT_TEXTURE) && !texturePermsCheck(id))
+			mClipboardSculptParams = NULL;
 	}
-	mClipboardLightImageParams = (LLLightImageParams*)objp->getParameterEntry(LLNetworkData::PARAMS_LIGHT_IMAGE);
-	if (mClipboardLightImageParams)
+	mClipboardLightImageParams = objp->getParameterEntryInUse(LLNetworkData::PARAMS_LIGHT_IMAGE) ? static_cast<LLLightImageParams*>(objp->getParameterEntry(LLNetworkData::PARAMS_LIGHT_IMAGE)) : NULL;
+	if (mClipboardLightImageParams && texturePermsCheck(mClipboardLightImageParams->getLightTexture()))
 	{
-		LLUUID id = mClipboardLightImageParams->getLightTexture();
-
-		// Texture perms check
-		if (!(id.isNull() || gInventory.isObjectDescendentOf(id, gInventory.getLibraryRootFolderID())
-			 || id == LLUUID(gSavedSettings.getString("UIImgWhiteUUID"))
-			 || id == LLUUID(gSavedSettings.getString("UIImgInvisibleUUID"))
-			 || id == LLUUID("8dcd4a48-2d37-4909-9f78-f7a9eb4ef903"))) // alpha
-		{
-			mClipboardLightImageParams->setLightTexture(findItemID(id));
-		}
+		mClipboardLightImageParams = NULL;
 	}
 }
 
@@ -2545,16 +2537,27 @@ void LLPanelObject::onPasteParams(void* user_data)
 
 	LLViewerObject* objp = self->mObject;
 
-	objp->updateVolume(mClipboardVolumeParams);
-
 	if (mClipboardFlexiParams)
 		objp->setParameterEntry(LLNetworkData::PARAMS_FLEXIBLE, *mClipboardFlexiParams, true);
+	else
+		objp->setParameterEntryInUse(LLNetworkData::PARAMS_FLEXIBLE, false, true);
+
 	if (mClipboardLightParams)
 		objp->setParameterEntry(LLNetworkData::PARAMS_LIGHT, *mClipboardLightParams, true);
+	else
+		objp->setParameterEntryInUse(LLNetworkData::PARAMS_LIGHT, false, true);
+
 	if (mClipboardSculptParams)
 		objp->setParameterEntry(LLNetworkData::PARAMS_SCULPT, *mClipboardSculptParams, true);
+	else
+		objp->setParameterEntryInUse(LLNetworkData::PARAMS_SCULPT, false, true);
+
 	if (mClipboardLightImageParams)
 		objp->setParameterEntry(LLNetworkData::PARAMS_LIGHT_IMAGE, *mClipboardLightImageParams, true);
+	else
+		objp->setParameterEntryInUse(LLNetworkData::PARAMS_LIGHT_IMAGE, false, true);
+
+	objp->updateVolume(mClipboardVolumeParams);
 }
 
 void LLPanelObject::onLinkObj(void* user_data)

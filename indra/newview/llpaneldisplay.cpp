@@ -105,22 +105,17 @@ LLPanelDisplay::LLPanelDisplay()
 BOOL LLPanelDisplay::postBuild()
 {
 	// return to default values
-	childSetAction("Defaults", setHardwareDefaults, NULL);
+	getChild<LLButton>("Defaults")->setClickedCallback(boost::bind(&LLPanelDisplay::setHardwareDefaults));
 	
-	// Help button
-	childSetAction("GraphicsPreferencesHelpButton", onOpenHelp, this);
-
 	//============================================================================
 	// Resolution
 	
 	// radio set for fullscreen size
 	
 	mCtrlWindowed = getChild<LLCheckBoxCtrl>( "windowed mode");
-	mCtrlWindowed->setCommitCallback(&LLPanelDisplay::onCommitWindowedMode);
-	mCtrlWindowed->setCallbackUserData(this);
+	mCtrlWindowed->setCommitCallback(boost::bind(&LLPanelDisplay::onCommitWindowedMode,this));
 
 	mAspectRatioLabel1 = getChild<LLTextBox>("AspectRatioLabel1");
-	mFullScreenInfo = getChild<LLTextEditor>("FullScreenInfo");
 	mDisplayResLabel = getChild<LLTextBox>("DisplayResLabel");
 
 	S32 num_resolutions = 0;
@@ -198,27 +193,24 @@ BOOL LLPanelDisplay::postBuild()
 	}
 
 	mCtrlAspectRatio = getChild<LLComboBox>( "aspect_ratio");
-	mCtrlAspectRatio->setTextEntryCallback(onKeystrokeAspectRatio);
-	mCtrlAspectRatio->setCommitCallback(onSelectAspectRatio);
-	mCtrlAspectRatio->setCallbackUserData(this);
+	mCtrlAspectRatio->setTextEntryCallback(&LLPanelDisplay::onKeystrokeAspectRatio);
+	mCtrlAspectRatio->setCallbackUserData(this); 
+	mCtrlAspectRatio->setCommitCallback(boost::bind(&LLPanelDisplay::onSelectAspectRatio,this));
 	// add default aspect ratios
 	mCtrlAspectRatio->add(aspect_ratio_text, &mAspectRatio, ADD_TOP);
 	mCtrlAspectRatio->setCurrentByIndex(0);
 
 	mCtrlAutoDetectAspect = getChild<LLCheckBoxCtrl>( "aspect_auto_detect");
-	mCtrlAutoDetectAspect->setCommitCallback(onCommitAutoDetectAspect);
-	mCtrlAutoDetectAspect->setCallbackUserData(this);
+	mCtrlAutoDetectAspect->setCommitCallback(boost::bind(&LLPanelDisplay::onCommitAutoDetectAspect,this,_2));
 
 	// radio performance box
 	mCtrlSliderQuality = getChild<LLSliderCtrl>("QualityPerformanceSelection");
-	mCtrlSliderQuality->setSliderMouseUpCallback(boost::bind(&LLPanelDisplay::onChangeQuality,mCtrlSliderQuality,this));
-	mCtrlSliderQuality->setCallbackUserData(this);
+	mCtrlSliderQuality->setSliderMouseUpCallback(boost::bind(&LLPanelDisplay::onChangeQuality,this,_1));
 
 	mCtrlCustomSettings = getChild<LLCheckBoxCtrl>("CustomSettings");
-	mCtrlCustomSettings->setCommitCallback(onChangeCustom);
-	mCtrlCustomSettings->setCallbackUserData(this);
+	mCtrlCustomSettings->setCommitCallback(boost::bind(&LLPanelDisplay::onChangeCustom));
 
-	mGraphicsBorder = getChild<LLViewBorder>("GraphicsBorder");
+	//mGraphicsBorder = getChild<LLViewBorder>("GraphicsBorder");
 
 	// Enable Transparent Water
 	mCtrlTransparentWater = getChild<LLCheckBoxCtrl>("TransparentWater");
@@ -230,24 +222,19 @@ BOOL LLPanelDisplay::postBuild()
 	//----------------------------------------------------------------------------
 	// Enable Reflections
 	mCtrlReflectionDetail = getChild<LLComboBox>("ReflectionDetailCombo");
-	mCtrlReflectionDetail->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlReflectionDetail->setCallbackUserData(this);
+	mCtrlReflectionDetail->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 
 	// WindLight
 	mCtrlWindLight = getChild<LLCheckBoxCtrl>("WindLightUseAtmosShaders");
-	mCtrlWindLight->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlWindLight->setCallbackUserData(this);
+	mCtrlWindLight->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 
 	// Deferred
 	mCtrlDeferred = getChild<LLCheckBoxCtrl>("RenderDeferred");
-	mCtrlDeferred->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlDeferred->setCallbackUserData(this);
+	mCtrlDeferred->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 	mCtrlDeferredDoF = getChild<LLCheckBoxCtrl>("RenderDepthOfField");
-	mCtrlDeferredDoF->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlDeferredDoF->setCallbackUserData(this);
+	mCtrlDeferredDoF->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 	mCtrlShadowDetail = getChild<LLComboBox>("ShadowDetailCombo");
-	mCtrlShadowDetail->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlShadowDetail->setCallbackUserData(this);
+	mCtrlShadowDetail->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 
 	//----------------------------------------------------------------------------
 	// Terrain Scale
@@ -256,15 +243,13 @@ BOOL LLPanelDisplay::postBuild()
 	//----------------------------------------------------------------------------
 	// Enable Avatar Shaders
 	mCtrlAvatarVP = getChild<LLCheckBoxCtrl>("AvatarVertexProgram");
-	mCtrlAvatarVP->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlAvatarVP->setCallbackUserData(this);
+	mCtrlAvatarVP->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 
 	//----------------------------------------------------------------------------
 	// Avatar Render Mode
 	mCtrlAvatarCloth = getChild<LLCheckBoxCtrl>("AvatarCloth");
 	mCtrlAvatarImpostors = getChild<LLCheckBoxCtrl>("AvatarImpostors");
-	mCtrlAvatarImpostors->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlAvatarImpostors->setCallbackUserData(this);
+	mCtrlAvatarImpostors->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 	mCtrlNonImpostors = getChild<LLSliderCtrl>("AvatarMaxVisible");
 
 	//----------------------------------------------------------------------------
@@ -282,8 +267,7 @@ BOOL LLPanelDisplay::postBuild()
 	//----------------------------------------------------------------------------
 	// Global Shader Enable
 	mCtrlShaderEnable = getChild<LLCheckBoxCtrl>("BasicShaders");
-	mCtrlShaderEnable->setCommitCallback(&LLPanelDisplay::onVertexShaderEnable);
-	mCtrlShaderEnable->setCallbackUserData(this);
+	mCtrlShaderEnable->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
 	
 	//============================================================================
 
@@ -291,50 +275,42 @@ BOOL LLPanelDisplay::postBuild()
 	mCtrlDrawDistance = getChild<LLSliderCtrl>("DrawDistance");
 	mDrawDistanceMeterText1 = getChild<LLTextBox>("DrawDistanceMeterText1");
 	mDrawDistanceMeterText2 = getChild<LLTextBox>("DrawDistanceMeterText2");
-	mCtrlDrawDistance->setCommitCallback(&LLPanelDisplay::updateMeterText);
-	mCtrlDrawDistance->setCallbackUserData(this);
+	mCtrlDrawDistance->setCommitCallback(boost::bind(&LLPanelDisplay::updateMeterText, this));
 
 	// Object detail slider
 	mCtrlLODFactor = getChild<LLSliderCtrl>("ObjectMeshDetail");
 	mLODFactorText = getChild<LLTextBox>("ObjectMeshDetailText");
-	mCtrlLODFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlLODFactor->setCallbackUserData(mLODFactorText);
+	mCtrlLODFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1,mLODFactorText));
 
 	// Flex object detail slider
 	mCtrlFlexFactor = getChild<LLSliderCtrl>("FlexibleMeshDetail");
 	mFlexFactorText = getChild<LLTextBox>("FlexibleMeshDetailText");
-	mCtrlFlexFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlFlexFactor->setCallbackUserData(mFlexFactorText);
+	mCtrlFlexFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText,_1, mFlexFactorText));
 
 	// Tree detail slider
 	mCtrlTreeFactor = getChild<LLSliderCtrl>("TreeMeshDetail");
 	mTreeFactorText = getChild<LLTextBox>("TreeMeshDetailText");
-	mCtrlTreeFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlTreeFactor->setCallbackUserData(mTreeFactorText);
+	mCtrlTreeFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mTreeFactorText));
 
 	// Avatar detail slider
 	mCtrlAvatarFactor = getChild<LLSliderCtrl>("AvatarMeshDetail");
 	mAvatarFactorText = getChild<LLTextBox>("AvatarMeshDetailText");
-	mCtrlAvatarFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlAvatarFactor->setCallbackUserData(mAvatarFactorText);
+	mCtrlAvatarFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mAvatarFactorText));
 
 	// Avatar physics detail slider
 	mCtrlAvatarPhysicsFactor = getChild<LLSliderCtrl>("AvatarPhysicsDetail");
 	mAvatarPhysicsFactorText = getChild<LLTextBox>("AvatarPhysicsDetailText");
-	mCtrlAvatarPhysicsFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlAvatarPhysicsFactor->setCallbackUserData(mAvatarPhysicsFactorText);
+	mCtrlAvatarPhysicsFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mAvatarPhysicsFactorText));
 
 	// Terrain detail slider
 	mCtrlTerrainFactor = getChild<LLSliderCtrl>("TerrainMeshDetail");
 	mTerrainFactorText = getChild<LLTextBox>("TerrainMeshDetailText");
-	mCtrlTerrainFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlTerrainFactor->setCallbackUserData(mTerrainFactorText);
+	mCtrlTerrainFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mTerrainFactorText));
 
 	// Terrain detail slider
 	mCtrlSkyFactor = getChild<LLSliderCtrl>("SkyMeshDetail");
 	mSkyFactorText = getChild<LLTextBox>("SkyMeshDetailText");
-	mCtrlSkyFactor->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlSkyFactor->setCallbackUserData(mSkyFactorText);
+	mCtrlSkyFactor->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mSkyFactorText));
 
 	// Particle detail slider
 	mCtrlMaxParticle = getChild<LLSliderCtrl>("MaxParticleCount");
@@ -342,21 +318,23 @@ BOOL LLPanelDisplay::postBuild()
 	// Glow detail slider
 	mCtrlPostProcess = getChild<LLSliderCtrl>("RenderPostProcess");
 	mPostProcessText = getChild<LLTextBox>("PostProcessText");
-	mCtrlPostProcess->setCommitCallback(&LLPanelDisplay::updateSliderText);
-	mCtrlPostProcess->setCallbackUserData(mPostProcessText);
+	mCtrlPostProcess->setCommitCallback(boost::bind(&LLPanelDisplay::updateSliderText, _1, mPostProcessText));
 
 	// Text boxes (for enabling/disabling)
 	mShaderText = getChild<LLTextBox>("ShadersText");
 	mReflectionText = getChild<LLTextBox>("ReflectionDetailText");
 	mAvatarText = getChild<LLTextBox>("AvatarRenderingText");
 	mTerrainText = getChild<LLTextBox>("TerrainDetailText");
-	mLightingText = getChild<LLTextBox>("LightingDetailText");
 	mMeshDetailText = getChild<LLTextBox>("MeshDetailText");
 	mShadowDetailText = getChild<LLTextBox>("ShadowDetailText");
 	mTerrainScaleText = getChild<LLTextBox>("TerrainScaleText");
 
 	// Hardware tab
-	childSetCommitCallback("vbo", &LLPanelDisplay::onRenderVBOEnable, this);
+	mVBO = getChild<LLCheckBoxCtrl>("vbo");
+	mVBO->setCommitCallback(boost::bind(&LLPanelDisplay::onVertexShaderEnable));
+
+	mVBOStream = getChild<LLCheckBoxCtrl>("vbo_stream");
+
 
 	refresh();
 
@@ -486,7 +464,6 @@ void LLPanelDisplay::refreshEnabledState()
 	mCtrlAspectRatio->setVisible(isFullScreen);
 	mAspectRatioLabel1->setVisible(isFullScreen);
 	mCtrlAutoDetectAspect->setVisible(isFullScreen);
-	mFullScreenInfo->setVisible(!isFullScreen);
 	mWindowSizeLabel->setVisible(!isFullScreen);
 	mCtrlWindowSize->setVisible(!isFullScreen);
 
@@ -604,13 +581,13 @@ void LLPanelDisplay::refreshEnabledState()
 	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderVBOEnable") ||
 		!gGLManager.mHasVertexBufferObject)
 	{
-		childSetEnabled("vbo", false);
+		mVBO->setEnabled(false);
 		//Streaming VBOs -Shyotl
-		childSetEnabled("vbo_stream", false);
+		mVBOStream->setEnabled(false);
 	}
 	else
 	{
-		childSetEnabled("vbo_stream", LLVertexBuffer::sEnableVBOs);
+		mVBOStream->setEnabled(gSavedSettings.getBOOL("RenderVBOEnable"));
 	}
 
 	// if no windlight shaders, enable gamma, and fog distance
@@ -713,7 +690,7 @@ void LLPanelDisplay::disableUnavailableSettings()
 void LLPanelDisplay::setHiddenGraphicsState(bool isHidden)
 {
 	// quick check
-	llassert(mGraphicsBorder != NULL);
+	//llassert(mGraphicsBorder != NULL);
 
 	llassert(mCtrlDrawDistance != NULL);
 	llassert(mCtrlLODFactor != NULL);
@@ -753,13 +730,12 @@ void LLPanelDisplay::setHiddenGraphicsState(bool isHidden)
 	llassert(mReflectionText != NULL);
 	llassert(mTerrainScaleText != NULL);
 	llassert(mAvatarText != NULL);
-	llassert(mLightingText != NULL);
 	llassert(mTerrainText != NULL);
 	llassert(mDrawDistanceMeterText1 != NULL);
 	llassert(mDrawDistanceMeterText2 != NULL);
 
 	// enable/disable the states
-	mGraphicsBorder->setVisible(!isHidden);
+	//mGraphicsBorder->setVisible(!isHidden);
 	/* 
 	LLColor4 light(.45098f, .51765f, .6078f, 1.0f);
 	LLColor4 dark(.10196f, .10196f, .10196f, 1.0f);
@@ -809,7 +785,6 @@ void LLPanelDisplay::setHiddenGraphicsState(bool isHidden)
 	mShaderText->setVisible(!isHidden);
 	mReflectionText->setVisible(!isHidden);
 	mAvatarText->setVisible(!isHidden);
-	mLightingText->setVisible(!isHidden);
 	mTerrainText->setVisible(!isHidden);
 	mDrawDistanceMeterText1->setVisible(!isHidden);
 	mDrawDistanceMeterText2->setVisible(!isHidden);
@@ -819,7 +794,7 @@ void LLPanelDisplay::setHiddenGraphicsState(bool isHidden)
 	// hide one meter text if we're making things visible
 	if(!isHidden)
 	{
-		updateMeterText(mCtrlDrawDistance, this);
+		updateMeterText();
 	}
 
 	mMeshDetailText->setVisible(!isHidden);
@@ -908,12 +883,11 @@ void LLPanelDisplay::apply()
 	}
 }
 
-void LLPanelDisplay::onChangeQuality(LLUICtrl *ctrl, void *data)
+void LLPanelDisplay::onChangeQuality(LLUICtrl* caller)
 {
-	LLSliderCtrl* sldr = static_cast<LLSliderCtrl*>(ctrl);
-	LLPanelDisplay* cur_panel = static_cast<LLPanelDisplay*>(data);
+	LLSlider* sldr = dynamic_cast<LLSlider*>(caller);
 
-	if(sldr == NULL || cur_panel == NULL)
+	if(sldr == NULL)
 	{
 		return;
 	}
@@ -922,26 +896,12 @@ void LLPanelDisplay::onChangeQuality(LLUICtrl *ctrl, void *data)
 	LLFeatureManager::getInstance()->setGraphicsLevel(set, true);
 	
 	LLFloaterPreference::refreshEnabledGraphics();
-	cur_panel->refresh();
+	refresh();
 }
 
-void LLPanelDisplay::onChangeCustom(LLUICtrl *ctrl, void *data)
+void LLPanelDisplay::onChangeCustom()
 {
 	LLFloaterPreference::refreshEnabledGraphics();
-}
-
-void LLPanelDisplay::onOpenHelp(void* user_data)
-{
-	LLPanelDisplay* self = static_cast<LLPanelDisplay*>(user_data);
-
-	const char* xml_alert = "GraphicsPreferencesHelp";
-	LLFloater* parent_floater = gFloaterView->getParentFloater(self);
-	LLNotifications::instance().add(parent_floater->contextualNotification(xml_alert));
-}
-
-void LLPanelDisplay::onApplyResolution(LLUICtrl* src, void* user_data)
-{
-	((LLPanelDisplay*) src)->applyResolution();
 }
 
 void LLPanelDisplay::applyResolution()
@@ -1035,20 +995,14 @@ void LLPanelDisplay::applyWindowSize()
 	}
 }
 
-//static 
-void LLPanelDisplay::onCommitWindowedMode(LLUICtrl* ctrl, void *data)
+void LLPanelDisplay::onCommitWindowedMode()
 {
-	LLPanelDisplay *panel = (LLPanelDisplay*)data;
-
-	panel->refresh();
+	refresh();
 }
 
-//static
-void LLPanelDisplay::onCommitAutoDetectAspect(LLUICtrl *ctrl, void *data)
+void LLPanelDisplay::onCommitAutoDetectAspect(const LLSD& value)
 {
-	LLPanelDisplay *panel = (LLPanelDisplay*)data;
-
-	BOOL auto_detect = ((LLCheckBoxCtrl*)ctrl)->get();
+	BOOL auto_detect = value.asBoolean();
 	F32 ratio;
 
 	if (auto_detect)
@@ -1070,27 +1024,23 @@ void LLPanelDisplay::onCommitAutoDetectAspect(LLUICtrl *ctrl, void *data)
 			aspect = llformat("%.3f", gViewerWindow->mWindow->getNativeAspectRatio());
 		}
 
-		panel->mCtrlAspectRatio->setLabel(aspect);
+		mCtrlAspectRatio->setLabel(aspect);
 
 		ratio = gViewerWindow->mWindow->getNativeAspectRatio();
 		gSavedSettings.setF32("FullScreenAspectRatio", ratio);
 	}
 }
 
-//static 
-void LLPanelDisplay::onKeystrokeAspectRatio(LLLineEditor* caller, void* user_data)
+void LLPanelDisplay::onKeystrokeAspectRatio(LLLineEditor* caller, void *user_data)
 {
-	LLPanelDisplay* panel = (LLPanelDisplay*)user_data;
+	LLPanelDisplay* panel = (LLPanelDisplay*)user_data; 
 
 	panel->mCtrlAutoDetectAspect->set(FALSE);
 }
 
-//static
-void LLPanelDisplay::onSelectAspectRatio(LLUICtrl*, void* user_data)
+void LLPanelDisplay::onSelectAspectRatio()
 {
-	LLPanelDisplay* panel = (LLPanelDisplay*)user_data;
-
-	panel->mCtrlAutoDetectAspect->set(FALSE);
+	mCtrlAutoDetectAspect->set(FALSE);
 }
 
 //static
@@ -1109,22 +1059,13 @@ void LLPanelDisplay::fractionFromDecimal(F32 decimal_val, S32& numerator, S32& d
 	}
 }
 
-//static
-void LLPanelDisplay::onVertexShaderEnable(LLUICtrl* self, void* data)
+void LLPanelDisplay::onVertexShaderEnable()
 {
 	LLFloaterPreference::refreshEnabledGraphics();
 }
 
 //static
-void LLPanelDisplay::onRenderVBOEnable(LLUICtrl* self, void* data)
-{
-	LLPanelDisplay* panel = (LLPanelDisplay*)data;
-	bool enable = panel->childGetValue("vbo").asBoolean();
-	panel->childSetEnabled("vbo_stream", enable);
-	if(!enable)	panel->childSetValue("vbo_stream", false);
-}
-
-void LLPanelDisplay::setHardwareDefaults(void* user_data)
+void LLPanelDisplay::setHardwareDefaults()
 {
 	LLFeatureManager::getInstance()->applyRecommendedSettings();
 	LLControlVariable* controlp = gSavedSettings.getControl("RenderAvatarMaxVisible");
@@ -1135,11 +1076,11 @@ void LLPanelDisplay::setHardwareDefaults(void* user_data)
 	LLFloaterPreference::refreshEnabledGraphics();
 }
 
-void LLPanelDisplay::updateSliderText(LLUICtrl* ctrl, void* user_data)
+//static
+void LLPanelDisplay::updateSliderText(LLUICtrl* ctrl, LLTextBox* text_box)
 {
 	// get our UI widgets
-	LLTextBox* text_box = (LLTextBox*)user_data;
-	LLSliderCtrl* slider = (LLSliderCtrl*) ctrl;
+	LLSliderCtrl* slider = dynamic_cast<LLSliderCtrl*>(ctrl);
 	if(text_box == NULL || slider == NULL)
 	{
 		return;
@@ -1177,20 +1118,13 @@ void LLPanelDisplay::updateSliderText(LLUICtrl* ctrl, void* user_data)
 	}
 }
 
-void LLPanelDisplay::updateMeterText(LLUICtrl* ctrl, void* user_data)
+void LLPanelDisplay::updateMeterText()
 {
-	// get our UI widgets
-	LLPanelDisplay* panel = (LLPanelDisplay*)user_data;
-	LLSliderCtrl* slider = (LLSliderCtrl*) ctrl;
-
-	LLTextBox* m1 = panel->getChild<LLTextBox>("DrawDistanceMeterText1");
-	LLTextBox* m2 = panel->getChild<LLTextBox>("DrawDistanceMeterText2");
-
 	// toggle the two text boxes based on whether we have 2 or 3 digits
-	F32 val = slider->getValueF32();
+	F32 val = mCtrlDrawDistance->getValueF32();
 	bool two_digits = val < 100;
-	m1->setVisible(two_digits);
-	m2->setVisible(!two_digits);
+	mDrawDistanceMeterText1->setVisible(two_digits);
+	mDrawDistanceMeterText2->setVisible(!two_digits);
 }
 
 

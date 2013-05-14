@@ -66,7 +66,7 @@ struct AIAccess {
 struct AIHTTPTimeoutPolicy {
   U16 getReplyDelay(void) const { return 60; }
   U16 getLowSpeedTime(void) const { return 30; }
-  U32 getLowSpeedLimit(void) const { return 56000; }
+  U32 getLowSpeedLimit(void) const { return 7000; }
   static bool connect_timed_out(std::string const&) { return false; }
 };
 
@@ -75,6 +75,7 @@ namespace AICurlPrivate {
 class BufferedCurlEasyRequest {
 public:
   char const* getLowercaseHostname(void) const { return "hostname.com"; }
+  char const* getLowercaseServicename(void) const { return "hostname.com:12047"; }
   void getinfo(const int&, double* p) { *p = 0.1; }
 };
 
@@ -84,6 +85,11 @@ public:
 
 #include "aihttptimeout.h"
 
+// If this is set, treat dc::curlio as off in the assertion below.
+#if defined(CWDEBUG) || defined(DEBUG_CURLIO)
+bool gCurlIo;
+#endif
+
 namespace AICurlPrivate {
 namespace curlthread {
 
@@ -91,8 +97,9 @@ namespace curlthread {
 // HTTPTimeout
 
 //static
-F64 const HTTPTimeout::sClockWidth = 1.0 / calc_clock_frequency();	// Time between two clock ticks, in seconds.
-U64 HTTPTimeout::sClockCount;										// Clock count, set once per select() exit.
+F64 const HTTPTimeout::sClockWidth_10ms = 100.0 / calc_clock_frequency();		// Time between two clock ticks, in 10ms units.
+F64 const HTTPTimeout::sClockWidth_40ms = HTTPTimeout::sClockWidth_10ms * 0.25;	// Time between two clock ticks, in 40ms units.
+U64 HTTPTimeout::sTime_10ms;													// Time in 10ms units, set once per select() exit.
 
 // CURL-THREAD
 // This is called when body data was sent to the server socket.
@@ -100,7 +107,7 @@ U64 HTTPTimeout::sClockCount;										// Clock count, set once per select() exi
 // queued--><--DNS lookup + connect + send headers-->[<--send body (if any)-->]<--replydelay--><--receive headers + body--><--done
 //                                                    ^ ^ ^       ^   ^      ^
 //                                                    | | |       |   |      |
-bool HTTPTimeout::data_sent(size_t n)
+bool HTTPTimeout::data_sent(size_t n, bool finished)
 {
   // Generate events.
   if (!mLowSpeedOn)
@@ -109,7 +116,7 @@ bool HTTPTimeout::data_sent(size_t n)
 	reset_lowspeed();
   }
   // Detect low speed.
-  return lowspeed(n);
+  return lowspeed(n, finished);
 }
 
 // CURL-THREAD
@@ -120,11 +127,26 @@ bool HTTPTimeout::data_sent(size_t n)
 //                                                    |                                        |
 void HTTPTimeout::reset_lowspeed(void)
 {
-  mLowSpeedClock = sClockCount;
+  mLowSpeedClock = sTime_10ms;
   mLowSpeedOn = true;
+  mLastBytesSent = false;	// We're just starting!
   mLastSecond = -1;			// This causes lowspeed to initialize the rest.
   mStalled = (U64)-1;		// Stop reply delay timer.
   DoutCurl("reset_lowspeed: mLowSpeedClock = " << mLowSpeedClock << "; mStalled = -1");
+}
+
+void HTTPTimeout::being_redirected(void)
+{
+  mBeingRedirected = true;
+}
+
+void HTTPTimeout::upload_starting(void)
+{
+  // We're not supposed start with an upload when it already finished, unless we're being redirected.
+  llassert(!mUploadFinished || mBeingRedirected);
+  mUploadFinished = false;
+  // Apparently there is something to upload. Start detecting low speed timeouts.
+  reset_lowspeed();
 }
 
 // CURL-THREAD
@@ -137,11 +159,13 @@ void HTTPTimeout::upload_finished(void)
 {
   llassert(!mUploadFinished);	// If we get here twice, then the 'upload finished' detection failed.
   mUploadFinished = true;
-  // We finished uploading (if there was a body to upload at all), so not more transfer rate timeouts.
+  // Only accept a call to upload_starting() if being_redirected() is called after this point.
+  mBeingRedirected = false;
+  // We finished uploading (if there was a body to upload at all), so no more transfer rate timeouts.
   mLowSpeedOn = false;
   // Timeout if the server doesn't reply quick enough.
-  mStalled = sClockCount + mPolicy->getReplyDelay() / sClockWidth;
-  DoutCurl("upload_finished: mStalled set to sClockCount (" << sClockCount << ") + " << (mStalled - sClockCount) << " (" << mPolicy->getReplyDelay() << " seconds)");
+  mStalled = sTime_10ms + 100 * mPolicy->getReplyDelay();
+  DoutCurl("upload_finished: mStalled set to Time_10ms (" << sTime_10ms << ") + " << (mStalled - sTime_10ms) << " (" << mPolicy->getReplyDelay() << " seconds)");
 }
 
 // CURL-THREAD
@@ -169,15 +193,10 @@ bool HTTPTimeout::data_received(size_t n/*,*/
 	  // using CURLOPT_DEBUGFUNCTION. Note that mDebugIsHeadOrGetMethod is only valid when the debug channel 'curlio' is on,
 	  // because it is set in the debug callback function.
 	  // This is also normal if we received a HTTP header with an error status, since that can interrupt our upload.
-	  Debug(llassert(upload_error_status || AICurlEasyRequest_wat(*mLockObj)->mDebugIsHeadOrGetMethod || !dc::curlio.is_on()));
+	  Debug(llassert(upload_error_status || AICurlEasyRequest_wat(*mLockObj)->mDebugIsHeadOrGetMethod || !dc::curlio.is_on() || gCurlIo));
 	  // 'Upload finished' detection failed, generate it now.
 	  upload_finished();
 	}
-	// Turn this flag off again now that we received data, so that if 'upload_finished()' is called again
-	// for a future upload on the same descriptor, then that won't trigger an assert.
-	// Note that because we also set mNothingReceivedYet here, we won't enter this code block anymore,
-	// so it's safe to do this.
-	mUploadFinished = false;
 	// Mark that something was received.
 	mNothingReceivedYet = false;
 	// We received something; switch to getLowSpeedLimit()/getLowSpeedTime().
@@ -193,9 +212,9 @@ bool HTTPTimeout::data_received(size_t n/*,*/
 // queued--><--DNS lookup + connect + send headers-->[<--send body (if any)-->]<--replydelay--><--receive headers + body--><--done
 //                                                    ^ ^ ^       ^   ^      ^                 ^  ^   ^     ^    ^  ^ ^   ^
 //                                                    | | |       |   |      |                 |  |   |     |    |  | |   |
-bool HTTPTimeout::lowspeed(size_t bytes)
+bool HTTPTimeout::lowspeed(size_t bytes, bool finished)
 {
-  //DoutCurlEntering("HTTPTimeout::lowspeed(" << bytes << ")");		commented out... too spammy for normal use.
+  //DoutCurlEntering("HTTPTimeout::lowspeed(" << bytes << ", " << finished << ")");		commented out... too spammy for normal use.
 
   // The algorithm to determine if we timed out if different from how libcurls CURLOPT_LOW_SPEED_TIME works.
   //
@@ -213,11 +232,13 @@ bool HTTPTimeout::lowspeed(size_t bytes)
   // less than low_speed_limit, we abort.
 
   // When are we?
-  S32 second = (sClockCount - mLowSpeedClock) * sClockWidth;
-  llassert(sClockWidth > 0.0);
+  S32 second = (sTime_10ms - mLowSpeedClock) / 100;
   // This REALLY should never happen, but due to another bug it did happened
   // and caused something so evil and hard to find that... NEVER AGAIN!
   llassert(second >= 0);
+
+  // finished should be false until the very last call to this function.
+  mLastBytesSent = finished;
 
   // If this is the same second as last time, just add the number of bytes to the current bucket.
   if (second == mLastSecond)
@@ -274,21 +295,39 @@ bool HTTPTimeout::lowspeed(size_t bytes)
   mBuckets[mBucket] = bytes;
 
   // Check if we timed out.
-  U32 const low_speed_limit = mPolicy->getLowSpeedLimit();
-  U32 mintotalbytes = low_speed_limit * low_speed_time;
+  U32 const low_speed_limit = mPolicy->getLowSpeedLimit();	// In bytes/s
+  U32 mintotalbytes = low_speed_limit * low_speed_time;		// In bytes.
   DoutCurl("Transfered " << mTotalBytes << " bytes in " << llmin(second, (S32)low_speed_time) << " seconds after " << second << " second" << ((second == 1) ? "" : "s") << ".");
   if (second >= low_speed_time)
   {
 	DoutCurl("Average transfer rate is " << (mTotalBytes / low_speed_time) << " bytes/s (low speed limit is " << low_speed_limit << " bytes/s)");
 	if (mTotalBytes < mintotalbytes)
 	{
+	  if (finished)
+	  {
+		llwarns <<
+#ifdef CWDEBUG
+		(void*)get_lockobj() << ": "
+#endif
+		"Transfer rate timeout (average transfer rate below " << low_speed_limit <<
+		" bytes/s for more than " << low_speed_time << " second" << ((low_speed_time == 1) ? "" : "s") <<
+		") but we just sent the LAST bytes! Waiting an additional 4 seconds." << llendl;
+		// Lets hope these last bytes will make it and do not time out on transfer speed anymore.
+		// Just give these bytes 4 more seconds to be written to the socket (after which we'll
+		// assume that the 'upload finished' detection failed and we'll wait another ReplyDelay
+		// seconds before finally, actually timing out.
+		mStalled = sTime_10ms + 400;		// 4 seconds into the future.
+		DoutCurl("mStalled set to sTime_10ms (" << sTime_10ms << ") + 400 (4 seconds)");
+		return false;
+	  }
 	  // The average transfer rate over the passed low_speed_time seconds is too low. Abort the transfer.
 	  llwarns <<
 #ifdef CWDEBUG
 		(void*)get_lockobj() << ": "
 #endif
 		"aborting slow connection (average transfer rate below " << low_speed_limit <<
-		" for more than " << low_speed_time << " second" << ((low_speed_time == 1) ? "" : "s") << ")." << llendl;
+		" bytes/s for more than " << low_speed_time << " second" << ((low_speed_time == 1) ? "" : "s") << ")." << llendl;
+	  // This causes curl to exit with CURLE_WRITE_ERROR.
 	  return true;
 	}
   }
@@ -327,11 +366,11 @@ bool HTTPTimeout::lowspeed(size_t bytes)
 	  llassert_always(bucket < low_speed_time);
 	  total_bytes -= mBuckets[bucket];	// Empty this bucket.
 	}
-	while(total_bytes >= 1);	// Use 1 here instead of mintotalbytes, to test that total_bytes indeed always reaches zero.
+	while(total_bytes >= mintotalbytes);
   }
   // If this function isn't called again within max_stall_time seconds, we stalled.
-  mStalled = sClockCount + max_stall_time / sClockWidth;
-  DoutCurl("mStalled set to sClockCount (" << sClockCount << ") + " << (mStalled - sClockCount) << " (" << max_stall_time << " seconds)");
+  mStalled = sTime_10ms + 100 * max_stall_time;
+  DoutCurl("mStalled set to sTime_10ms (" << sTime_10ms << ") + " << (mStalled - sTime_10ms) << " (" << max_stall_time << " seconds)");
 
   return false;
 }
@@ -377,6 +416,19 @@ void HTTPTimeout::done(AICurlEasyRequest_wat const& curlEasyRequest_w, CURLcode 
   DoutCurl("done: mStalled set to -1");
 }
 
+bool HTTPTimeout::maybe_upload_finished(void)
+{
+  if (!mUploadFinished && mLastBytesSent)
+  {
+	// Assume that 'upload finished' detection failed and the server is slow with a reply.
+	// Switch to waiting for a reply.
+	upload_finished();
+	return true;
+  }
+  // The upload certainly finished or certainly did not finish.
+  return false;
+}
+
 // Libcurl uses GetTickCount on windows, with a resolution of 10 to 16 ms.
 // As a result, we can not assume that namelookup_time == 0 has a special meaning.
 #define LOWRESTIMER LL_WINDOWS
@@ -384,7 +436,7 @@ void HTTPTimeout::done(AICurlEasyRequest_wat const& curlEasyRequest_w, CURLcode 
 void HTTPTimeout::print_diagnostics(CurlEasyRequest const* curl_easy_request, char const* eff_url)
 {
 #ifndef HTTPTIMEOUT_TESTSUITE
-  llwarns << "Request to \"" << curl_easy_request->getLowercaseHostname() << "\" timed out for " << curl_easy_request->getTimeoutPolicy()->name() << llendl;
+  llwarns << "Request to \"" << curl_easy_request->getLowercaseServicename() << "\" timed out for " << curl_easy_request->getTimeoutPolicy()->name() << llendl;
   llinfos << "Effective URL: \"" << eff_url << "\"." << llendl;
   double namelookup_time, connect_time, appconnect_time, pretransfer_time, starttransfer_time;
   curl_easy_request->getinfo(CURLINFO_NAMELOOKUP_TIME, &namelookup_time);
@@ -492,6 +544,10 @@ void HTTPTimeout::print_diagnostics(CurlEasyRequest const* curl_easy_request, ch
   if (mUploadFinished)
   {
 	llinfos << "The request upload finished successfully." << llendl;
+  }
+  else if (mLastBytesSent)
+  {
+	llinfos << "All bytes where sent to libcurl for upload." << llendl;
   }
   if (mLastSecond > 0 && mLowSpeedOn)
   {

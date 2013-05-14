@@ -212,6 +212,7 @@
 #include "llinventorybridge.h"
 #include "llappearancemgr.h"
 #include "jcfloaterareasearch.h"
+#include "generichandlers.h"
 
 // <edit>
 #include "llpanellogin.h"
@@ -260,10 +261,6 @@ extern S32 gStartImageHeight;
 //
 // local globals
 //
-
-#if defined(CWDEBUG) || defined(DEBUG_CURLIO)
-static bool gCurlIo;
-#endif
 
 static LLHost gAgentSimHost;
 static BOOL gSkipOptionalUpdate = FALSE;
@@ -376,13 +373,10 @@ void hooked_process_sound_trigger(LLMessageSystem *msg, void **)
 // true when all initialization done.
 bool idle_startup()
 {
-	LLMemType mt1(LLMemType::MTYPE_STARTUP);
-	
 	const F32 PRECACHING_DELAY = gSavedSettings.getF32("PrecachingDelay");
 	const F32 TIMEOUT_SECONDS = 5.f;
 	const S32 MAX_TIMEOUT_COUNT = 3;
 	static LLTimer timeout;
-	static S32 timeout_count = 0;
 
 	static LLTimer login_time;
 
@@ -404,7 +398,6 @@ bool idle_startup()
 
 	// last location by default
 	static S32  agent_location_id = START_LOCATION_ID_LAST;
-	static S32  location_which = START_LOCATION_ID_LAST;
 
 	static bool show_connect_box = true;
 
@@ -845,14 +838,13 @@ bool idle_startup()
 		
 		gViewerWindow->getWindow()->setCursor(UI_CURSOR_ARROW);
 
-		timeout_count = 0;
-
-
 		// *NOTE: This is where LLViewerParcelMgr::getInstance() used to get allocated before becoming LLViewerParcelMgr::getInstance().
 
 		// *NOTE: This is where gHUDManager used to bet allocated before becoming LLHUDManager::getInstance().
 
 		// *NOTE: This is where gMuteList used to get allocated before becoming LLMuteList::getInstance().
+
+		gGenericHandlers = new GenericHandlers();
 
 		// Initialize UI
 		if (!gNoRender)
@@ -1010,11 +1002,14 @@ bool idle_startup()
 		if(!gHippoGridManager->getConnectedGrid()->isSecondLife())
 		{
 			LLTrans::setDefaultArg("[CURRENCY]",gHippoGridManager->getConnectedGrid()->getCurrencySymbol());	//replace [CURRENCY] with OS$, not L$ for instance.
+			LLTrans::setDefaultArg("[CURRENCY_TEXT]",gHippoGridManager->getConnectedGrid()->getCurrencyText());	//replace [CURRENCYTEXT] with OS DOllars, not Linden Dollars for instance.
 			LLTrans::setDefaultArg("[SECOND_LIFE]", gHippoGridManager->getConnectedGrid()->getGridName());
 			LLTrans::setDefaultArg("[SECOND_LIFE_GRID]", gHippoGridManager->getConnectedGrid()->getGridName() + " Grid");
 			LLTrans::setDefaultArg("[GRID_OWNER]", gHippoGridManager->getConnectedGrid()->getGridOwner());
 			LLScriptEdCore::parseFunctions("lsl_functions_os.xml"); //Singu Note: This appends to the base functions parsed from lsl_functions_sl.xml
 		}
+		// Avination doesn't want the viewer to do bandwidth throttling (it is done serverside, taking UDP into account too).
+		AIPerService::setNoHTTPBandwidthThrottling(gHippoGridManager->getConnectedGrid()->isAvination());
 
 		// create necessary directories
 		// *FIX: these mkdir's should error check
@@ -1048,7 +1043,8 @@ bool idle_startup()
 		//Default the path if one isn't set.
 		if (gSavedPerAccountSettings.getString("InstantMessageLogPath").empty())
 		{
-			gDirUtilp->setChatLogsDir(gDirUtilp->getOSUserAppDir());
+			const std::string dir = gSavedSettings.getString("InstantMessageLogPathAnyAccount");
+			gDirUtilp->setChatLogsDir(dir.empty() ? gDirUtilp->getOSUserAppDir() : dir);
 			gSavedPerAccountSettings.setString("InstantMessageLogPath",gDirUtilp->getChatLogsDir());
 		}
 		else
@@ -1131,7 +1127,6 @@ bool idle_startup()
 		{
 			// Force login at the last location
 			agent_location_id = START_LOCATION_ID_LAST;
-			location_which = START_LOCATION_ID_LAST;
 			gSavedSettings.setBOOL("LoginLastLocation", FALSE);
 			
 			// Clear some things that would cause us to divert to a user-specified location
@@ -1143,21 +1138,14 @@ bool idle_startup()
 		{
 			// a startup URL was specified
 			agent_location_id = START_LOCATION_ID_URL;
-
-			// doesn't really matter what location_which is, since
-			// agent_start_look_at will be overwritten when the
-			// UserLoginLocationReply arrives
-			location_which = START_LOCATION_ID_LAST;
 		}
 		else if (gSavedSettings.getBOOL("LoginLastLocation"))
 		{
 			agent_location_id = START_LOCATION_ID_LAST;	// last location
-			location_which = START_LOCATION_ID_LAST;
 		}
 		else
 		{
 			agent_location_id = START_LOCATION_ID_HOME;	// home
-			location_which = START_LOCATION_ID_HOME;
 		}
 
 		gViewerWindow->getWindow()->setCursor(UI_CURSOR_WAIT);
@@ -4393,6 +4381,8 @@ bool process_login_success_response(std::string& password)
 	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setSearchUrl(tmp);
 	tmp = response["currency"].asString();
 	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setCurrencySymbol(tmp);
+	tmp = response["currency_text"].asString();
+	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setCurrencyText(tmp);
 	tmp = response["real_currency"].asString();
 	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setRealCurrencySymbol(tmp);
 	tmp = response["directory_fee"].asString();
@@ -4403,6 +4393,8 @@ bool process_login_success_response(std::string& password)
 	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setMaxAgentGroups(atoi(tmp.c_str()));
 	tmp = response["VoiceConnector"].asString();
 	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setVoiceConnector(tmp);
+	tmp = response["upc_supported"].asString();
+	if (!tmp.empty()) gHippoGridManager->getConnectedGrid()->setUPCSupported(true);
 	gHippoGridManager->saveFile();
 	gHippoLimits->setLimits();
 

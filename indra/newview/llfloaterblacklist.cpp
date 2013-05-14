@@ -43,6 +43,25 @@ void LLFloaterBlacklist::show()
 		sInstance->open();
 	}
 }
+// static
+void LLFloaterBlacklist::toggle()
+{
+	if (sInstance && sInstance->getVisible())
+	{
+		delete sInstance;
+	}
+	else
+	{
+		show();
+	}
+}
+// static
+BOOL LLFloaterBlacklist::visible()
+{
+	if (sInstance && sInstance->getVisible())
+		return TRUE;
+	return FALSE;
+}
 BOOL LLFloaterBlacklist::postBuild()
 {
 	childSetAction("add_btn", onClickAdd, this);
@@ -51,7 +70,7 @@ BOOL LLFloaterBlacklist::postBuild()
 	childSetAction("remove_btn", onClickRemove, this);
 	childSetAction("save_btn", onClickSave, this);
 	childSetAction("load_btn", onClickLoad, this);
-	childSetAction("rerender_btn", onClickRerender, this);
+	//childSetAction("rerender_btn", onClickRerender, this);
 	childSetVisible("copy_uuid_btn",false);
 	LLComboBox* box = getChild<LLComboBox>("asset_combo");
 	box->add("Texture",LLSD(0));

@@ -231,24 +231,26 @@ public:
 						   void *cargo_data, EAcceptance *accept,
 						   std::string& tooltip_msg);
 
+	BOOL    focusFirstItem(BOOL prefer_text_fields = FALSE, BOOL focus_flash = TRUE );
+
+	void            onFocusReceived();
 	void			onInputEditorFocusReceived();
 	void			onInputEditorFocusLost();
 	static void		onInputEditorKeystroke(LLLineEditor* caller, void* userdata);
 	static void		onCommitChat(LLUICtrl* caller, void* userdata);
 	static void		onTabClick( void* userdata );
 
-	static void		onClickProfile( void* userdata );
+	void			onClickProfile();
 	static void		onClickHistory( void* userdata );
-	static void		onRPMode(LLUICtrl* source, void* user_data);
-	static void		onClickTeleport( void* userdata );
-	static void		onClickGroupInfo( void* userdata );
+	void			onRPMode(const LLSD& value);
+	void			onClickTeleport();
+	void			onClickGroupInfo();
 	static void		onClickClose( void* userdata );
 	static void		onClickStartCall( void* userdata );
 	static void		onClickEndCall( void* userdata );
 	static void		onClickSend( void* userdata );
-	static void		onClickToggleActiveSpeakers( void* userdata );
+	void			onClickToggleActiveSpeakers(const LLSD& value);
 	static void*	createSpeakersPanel(void* data);
-	static void		onKickSpeaker(void* user_data);
 
 	//callbacks for P2P muting and volume control
 	static void onClickMuteVoice(void* user_data);
@@ -385,8 +387,6 @@ private:
 	boost::signals2::connection mFocusLostSignal;
 
 
-	CachedUICtrl<LLPanel> mActiveSpeakersPanel;
-	CachedUICtrl<LLButton> mToggleActiveSpeakersBtn;
 	CachedUICtrl<LLUICtrl> mVolumeSlider;
 	CachedUICtrl<LLButton> mEndCallBtn;
 	CachedUICtrl<LLButton> mStartCallBtn;

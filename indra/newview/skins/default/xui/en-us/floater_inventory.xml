@@ -12,7 +12,7 @@
     label="" image_overlay="inv_expand_all.tga" name="Inventory.ExpandAll" mouse_opaque="true" font="SansSerif"
     tool_tip="Expand All"/>
    <button left="50" bottom_delta="0" height="22" width="22" follows="left|top" label="" scale_image="true"
-    image_selected="UIImgBtnClosePressedUUID" image_unselected="UIImgBtnCloseActiveUUID" name="Inventory.ResetAll" tool_tip="Reset inventory: clear filters and collapse all folders."/>
+    image_overlay="inv_reset.tga" name="Inventory.ResetAll" tool_tip="Reset inventory: clear filters and collapse all folders."/>
  <text name="group_titles_textbox" halign="right" font="SansSerifSmall" follows="left|top"
     height="16" left="43" bottom_delta="2" right="108">Type:</text>
 	<!-- Inventory Type Filter Labels -->
@@ -72,6 +72,9 @@
 			     name="Open" width="128">
 				<on_click filter="" function="Inventory.DoToSelected" userdata="open" />
 			</menu_item_call>
+			<menu_item_call label="Update Outfit" mouse_opaque="true" name="Update Outfit">
+				<on_click filter="" function="Inventory.DoCreate" userdata="update outfit"/>
+			</menu_item_call>
 			<menu_item_separator bottom_delta="-8" height="8" left="0" mouse_opaque="true" name="separator"
 			     width="128" />
 			<menu_item_call bottom_delta="-18" height="18" label="New Window" left="0" mouse_opaque="true"
@@ -122,7 +125,7 @@
 			     name="New Gesture" width="121">
 				<on_click filter="" function="Inventory.DoCreate" userdata="gesture" />
 			</menu_item_call>
-			<menu bottom_delta="-689" drop_shadow="true" height="175" left="0"
+			<menu bottom_delta="-689" drop_shadow="true" height="175" left="0" label="New Clothes"
 			     mouse_opaque="false" name="New Clothes" opaque="true" width="125">
 				<menu_item_call bottom_delta="-18" height="18" label="New Shirt" left="0" mouse_opaque="true"
 				     name="New Shirt" width="125">
@@ -173,7 +176,7 @@
           <on_click filter="" function="Inventory.DoCreate" userdata="physics" />
         </menu_item_call>
 			</menu>
-			<menu bottom_delta="-599" drop_shadow="true" height="85" left="0"
+			<menu bottom_delta="-599" drop_shadow="true" height="85" left="0" label="New Body Parts" 
 			     mouse_opaque="false" name="New Body Parts" opaque="true" width="118">
 				<menu_item_call bottom_delta="-18" height="18" label="New Shape" left="0" mouse_opaque="true"
 				     name="New Shape" width="118">
