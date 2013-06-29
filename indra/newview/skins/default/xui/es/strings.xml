@@ -287,6 +287,7 @@
 	<string name="connected">Conectado</string>
 	<string name="unavailable">Chat de Voz no disponible en esta ubicación</string>
 	<string name="hang_up">Desconectado del Chat de Voz</string>
+	<string name="conference-title">Chat multi-persona</string>
 	<string name="ScriptTakeMoney">Transferir moneda de tu cuenta</string>
 	<string name="ActOnControlInputs">Actuar en tus controles de entrada</string>
 	<string name="RemapControlInputs">Reconfigurar tus controles de entrada</string>
@@ -1905,7 +1906,7 @@ Requests that a nonphysical object be keyframed according to keyframe list.
 	</string>
 	<string name="LSLTipText_llTransferLindenDollars">
 key llTransferLindenDollars(key destination, integer amount)
-Transfer amount of linden dollars (L$) from script owner to destination. Returns a key to a corresponding transaction_result event for the success of the transfer.
+Transfer amount of linden dollars ([CURRENCY]) from script owner to destination. Returns a key to a corresponding transaction_result event for the success of the transfer.
 	</string>
 	<string name="LSLTipText_llGetParcelMusicURL">
 string llGetParcelMusicURL()
@@ -1913,7 +1914,7 @@ Gets the streaming audio URL for the parcel of land on which the object is locat
 	</string>
 	<string name="LSLTipText_llSetRegionPos">
 integer llSetRegionPos(vector pos)
-Sets the position anywhere within the region (if the object isn&apos;t physical)
+Sets the position anywhere within the region (if the object isn't physical)
 	</string>
 	<string name="LSLTipText_llNavigateTo">
 llNavigateTo(vector point, list options)
@@ -2952,8 +2953,9 @@ Where tag = tag string to match.  Removes bot's matching the tag.
 
 	<!-- inventory -->
 	<string name="InventoryNoMatchingItems">Elementos no hallados en el inventario.</string>
+	<string name="InventoryNoTexture">No tienes en tu inventario una copia de esta textura</string>
 	<string name="MarketplaceURL">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/</string>
-	<string name="MarketplaceURL_CreateStore">http://community.secondlife.com/t5/English-Knowledge-Base/Selling-in-the-Marketplace/ta-p/700193#Section_.4</string>
+	<string name="MarketplaceURL_CreateStore">http://community.secondlife.com/t5/English-Knowledge-Base/Selling-in-the-Marketplace/ta-p/700193#Section_.3</string>
 	<string name="MarketplaceURL_Dashboard">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/merchants/store/dashboard</string>
 	<string name="MarketplaceURL_Imports">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/merchants/store/imports</string>
 	<string name="MarketplaceURL_LearnMore">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/learn_more</string>
@@ -3222,6 +3224,10 @@ La
 	<string name="LocalSettings">Configuración Local</string>
 	<string name="Region">Región</string>
 	<string name="RegionSettings">Configuración de Región</string>
+
+	<!-- Multi Preview Floater -->
+	<string name="MultiPreviewTitle">Vista previa</string>
+	<string name="MultiPropertiesTitle">Propiedades</string>
 
 	<!-- inventory offer -->
 	<string name="InvOfferAnObjectNamed">Un objeto llamado</string>
@@ -4065,16 +4071,16 @@ Si continuas recibiendo este mensaje, contacta con [SUPPORT_SITE].
 	<string name="Home position set.">Posición de la Base definida.</string>
 
 <!-- Financial operations strings -->
-	<string name="paid_you_ldollars">[NAME] te ha pagado L$[AMOUNT] [REASON].</string>
-	<string name="paid_you_ldollars_no_reason">[NAME] te ha pagado L$[AMOUNT].</string>
-	<string name="you_paid_ldollars">Has pagado a [NAME] L$[AMOUNT] [REASON].</string>
-	<string name="you_paid_ldollars_no_info">Has pagado L$[AMOUNT].</string>
-	<string name="you_paid_ldollars_no_reason">Has pagado a [NAME] L$[AMOUNT].</string>
-	<string name="you_paid_ldollars_no_name">Has pagado L$[AMOUNT] [REASON].</string>
-	<string name="you_paid_failure_ldollars">Ha fallado tu pago [NAME] L$[AMOUNT] [REASON].</string>
-	<string name="you_paid_failure_ldollars_no_info">Ha fallado tu pago de L$[AMOUNT].</string>
-	<string name="you_paid_failure_ldollars_no_reason">Ha fallado tu pago a [NAME] L$[AMOUNT].</string>
-	<string name="you_paid_failure_ldollars_no_name">Ha fallado tu pago de L$[AMOUNT] [REASON].</string>
+	<string name="paid_you_ldollars">[NAME] te ha pagado [CURRENCY][AMOUNT] [REASON].</string>
+	<string name="paid_you_ldollars_no_reason">[NAME] te ha pagado [CURRENCY][AMOUNT].</string>
+	<string name="you_paid_ldollars">Has pagado a [NAME] [CURRENCY][AMOUNT] [REASON].</string>
+	<string name="you_paid_ldollars_no_info">Has pagado [CURRENCY][AMOUNT].</string>
+	<string name="you_paid_ldollars_no_reason">Has pagado a [NAME] [CURRENCY][AMOUNT].</string>
+	<string name="you_paid_ldollars_no_name">Has pagado [CURRENCY][AMOUNT] [REASON].</string>
+	<string name="you_paid_failure_ldollars">Ha fallado tu pago [NAME] [CURRENCY][AMOUNT] [REASON].</string>
+	<string name="you_paid_failure_ldollars_no_info">Ha fallado tu pago de [CURRENCY][AMOUNT].</string>
+	<string name="you_paid_failure_ldollars_no_reason">Ha fallado tu pago a [NAME] [CURRENCY][AMOUNT].</string>
+	<string name="you_paid_failure_ldollars_no_name">Ha fallado tu pago de [CURRENCY][AMOUNT] [REASON].</string>
 	<string name="for item">para[ITEM]</string>
 	<string name="for a parcel of land">por una parcela de terreno</string>
 	<string name="for a land access pass">por acceso a una parcela</string>
@@ -4208,6 +4214,8 @@ Intenta entrecomillando el camino al editor.
 	<string name="BeaconSound">Viendo balizas de sonidos (amarillo)</string>
 	<string name="BeaconMedia">Viendo balizas de medios (blanco)</string>
 	<string name="ParticleHiding">Oocultando PartículasHiding Particlesstring>
+
+	<string name="Command_Profile_Label">Perfil</string>
 
 	<!-- Pathfinding -->
 	<string name="Pathfinding_Wiki_URL">http://wiki.secondlife.com/wiki/Pathfinding_Tools_in_the_Second_Life_Viewer</string>

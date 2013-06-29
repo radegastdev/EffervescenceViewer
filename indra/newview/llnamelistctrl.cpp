@@ -50,14 +50,12 @@ std::set<LLNameListCtrl*> LLNameListCtrl::sInstances;
 
 LLNameListCtrl::LLNameListCtrl(const std::string& name,
 							   const LLRect& rect,
-							   LLUICtrlCallback cb,
-							   void* userdata,
 							   BOOL allow_multiple_selection,
 							   BOOL draw_border,
 							   bool draw_heading,
 							   S32 name_column_index,
 							   const std::string& tooltip)
-:	LLScrollListCtrl(name, rect, cb, userdata, allow_multiple_selection,
+:	LLScrollListCtrl(name, rect, NULL, allow_multiple_selection,
 					 draw_border,draw_heading),
 	mNameColumnIndex(name_column_index),
 	mAllowCallingCardDrop(FALSE),
@@ -321,9 +319,6 @@ LLXMLNodePtr LLNameListCtrl::getXML(bool save_children) const
 
 LLView* LLNameListCtrl::fromXML(LLXMLNodePtr node, LLView *parent, LLUICtrlFactory *factory)
 {
-	std::string name("name_list");
-	node->getAttributeString("name", name);
-
 	LLRect rect;
 	createRect(node, rect, parent, LLRect());
 
@@ -339,12 +334,8 @@ LLView* LLNameListCtrl::fromXML(LLXMLNodePtr node, LLView *parent, LLUICtrlFacto
 	S32 name_column_index = 0;
 	node->getAttributeS32("name_column_index", name_column_index);
 
-	LLUICtrlCallback callback = NULL;
-
-	LLNameListCtrl* name_list = new LLNameListCtrl(name,
+	LLNameListCtrl* name_list = new LLNameListCtrl("name_list",
 				   rect,
-				   callback,
-				   NULL,
 				   multi_select,
 				   draw_border,
 				   draw_heading,

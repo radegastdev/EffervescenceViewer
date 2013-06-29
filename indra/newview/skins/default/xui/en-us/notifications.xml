@@ -713,6 +713,21 @@ Do you wish to proceed?
 
   <notification
    icon="alertmodal.tga"
+   name="JoinGroupNoCost"
+   type="alertmodal">
+You are joining group [NAME].
+Do you wish to proceed?
+    <tag>group</tag>
+    <tag>confirm</tag>
+    <usetemplate
+     name="okcancelbuttons"
+     notext="Cancel"
+     yestext="Join"/>
+  </notification>
+
+
+  <notification
+   icon="alertmodal.tga"
    name="JoinGroupCannotAfford"
    type="alertmodal">
 Joining this group costs [CURRENCY][COST].
@@ -937,6 +952,20 @@ This entire region is damage enabled.
 Scripts must be allowed to run for weapons to work.
   </notification>
 
+<notification
+   icon="alertmodal.tga"
+   name="MultipleFacesSelected"
+   type="alertmodal">
+Multiple faces are currently selected.
+If you continue this action, separate instances of media will be set on multiple faces of the object.
+To place the media on only one face, choose Select Face and click on the desired face of that object then click Add.
+    <tag>confirm</tag>
+    <usetemplate
+      ignoretext="Media will be set on multiple selected faces"
+      name="okcancelignore"
+      notext="Cancel"
+      yestext="OK"/>
+  </notification>
   <notification
    icon="alertmodal.tga"
    name="MustBeInParcel"
@@ -1090,6 +1119,21 @@ There is no reimbursement for fees paid.
      name="okcancelbuttons"
      notext="Cancel"
      yestext="OK"/>
+  </notification>
+
+
+<notification
+   icon="alertmodal.tga"
+   name="DeleteMedia"
+   type="alertmodal">
+You have selected to delete the media associated with this face.
+Are you sure you want to continue?
+    <tag>confirm</tag>
+    <usetemplate
+     ignoretext="Confirm before I delete media from an object"
+     name="okcancelignore"
+     notext="No"
+     yestext="Yes"/>
   </notification>
 
   <notification
@@ -2355,20 +2399,6 @@ You do not have permission to buy land for your active group.
   <notification
    icon="alertmodal.tga"
    label="Add Friend"
-   name="AddFriend"
-   type="alertmodal">
-Friends can give permissions to track each other on the map and receive online status updates.
-
-Offer friendship to [NAME]?
-    <usetemplate
-     name="okcancelbuttons"
-     notext="Cancel"
-     yestext="OK"/>
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
-   label="Add Friend"
    name="AddFriendWithMessage"
    type="alertmodal">
 Friends can give permissions to track each other on the map and receive online status updates.
@@ -2678,12 +2708,32 @@ Display settings have been set to recommended levels based on your system config
 [ERROR_MESSAGE]
   </notification>
 
+ <notification
+   icon="alertmodal.tga"
+   name="AvatarMovedDesired"
+   type="alertmodal">
+   <tag>fail</tag>
+Your desired location is not currently available.
+You have been moved into a nearby region.
+  </notification>
+
   <notification
    icon="alertmodal.tga"
-   name="AvatarMoved"
-   type="notify">
-Your [TYPE] location is not currently available. [HELP]
+   name="AvatarMovedLast"
+   type="alertmodal">
+   <tag>fail</tag>
+Your requested location is not currently available.
 You have been moved into a nearby region.
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
+   name="AvatarMovedHome"
+   type="alertmodal">
+   <tag>fail</tag>
+Your home location is not currently available.
+You have been moved into a nearby region.
+You may want to set a new home location.
   </notification>
 
   <notification
@@ -2750,6 +2800,15 @@ Please choose the male or female avatar. You can change your mind later.
      name="okcancelbuttons"
      notext="Female"
      yestext="Male"/>
+  </notification>
+  <notification icon="alertmodal.tga"
+		name="CantTeleportToGrid"
+		type="alertmodal">
+Could not teleport to [SLURL] as it's on a different grid ([GRID]) than the current grid ([CURRENT_GRID]).  Please close your viewer and try again.
+  <tag>fail</tag>
+    <usetemplate
+     name="okbutton"
+     yestext="OK"/>
   </notification>
 
   <notification
@@ -3296,6 +3355,18 @@ To leave a group select the &apos;Groups...&apos; option from the &apos;Edit&apo
 
   <notification
    icon="alert.tga"
+   name="JoinedTooManyGroups"
+   type="alert">
+You have reached your maximum number of groups. Please leave some group before joining or creating a new one.
+    <tag>group</tag>
+    <tag>fail</tag>
+    <usetemplate
+     name="okbutton"
+     yestext="OK"/>
+  </notification>
+
+  <notification
+   icon="alert.tga"
    name="KickUser"
    type="alert">
 Kick this user with what message?
@@ -3482,9 +3553,22 @@ Join me in [REGION]
 
   <notification
    icon="alertmodal.tga"
+   name="TooManyTeleportOffers"
+   type="alertmodal">
+You attempted to make [OFFERS] teleport offers
+which exceeds the limit of [LIMIT].
+    <tag>group</tag>
+    <tag>fail</tag>
+  <usetemplate
+     name="okbutton"
+     yestext="OK"/>
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
    name="OfferTeleportFromGod"
    type="alertmodal">
-God summon user to your location?
+God summon Resident to your location?
     <form name="form">
       <input name="message" type="text">
 Join me in [REGION]
@@ -4850,34 +4934,10 @@ The resolution of this report applies only to this Region; Residents access to o
 
   <notification
    icon="alertmodal.tga"
-   name="HelpReportBug"
-   type="alertmodal">
-Use this tool to *only* report technical features that do not perform as described or expected, please provide as much detail as possible.
-You may reply to the auto-response email to add more details to your report.
-
-All bug reports are investigated and assessed. No email response will be sent.
-
-If you are having a technical difficulty, please contact Support at:
-
-http://secondlife.com/community/support.php
-
-Note: Incomplete reports will not be investigated
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
    name="HelpReportAbuseSelectCategory"
    type="alertmodal">
 Please select a category for this abuse report.
 Selecting a category helps us file and process abuse reports.
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
-   name="HelpReportBugSelectCategory"
-   type="alertmodal">
-Please select a category for this bug.
-Selecting a category helps us file and process bug reports.
   </notification>
 
   <notification
@@ -4906,28 +4966,11 @@ Entering an accurate summary helps us file and process abuse reports.
 
   <notification
    icon="alertmodal.tga"
-   name="HelpReportBugSummaryEmpty"
-   type="alertmodal">
-Please enter a summary of the bug.
-Entering an accurate summary helps us file and process bug reports.
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
    name="HelpReportAbuseDetailsEmpty"
    type="alertmodal">
 Please enter a detailed description of the abuse that took place.
 Be as specific as you can, including names and the details of the incident you are reporting.
 Entering an accurate description helps us file and process abuse reports.
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
-   name="HelpReportBugDetailsEmpty"
-   type="alertmodal">
-Please enter a detailed description of the bug.
-Be as specific as you can, including steps to reproduce the bug if possible.
-Entering an accurate description helps us file and process bug reports.
   </notification>
 
   <notification
@@ -6703,6 +6746,13 @@ An object named [OBJECTFROMNAME] owned by (an unknown user) has given you a [OBJ
 
   <notification
    icon="notify.tga"
+   name="FriendshipOffered"
+   type="notifytip">
+	You have offered friendship to [TO_NAME]
+  </notification>
+
+  <notification
+   icon="notify.tga"
    name="OfferFriendshipNoMessage"
    type="notify">
 [NAME] is offering friendship.
@@ -7306,6 +7356,56 @@ We are creating a voice channel for you. This may take up to one minute.
   </notification>
 
   <notification
+   icon="notify.tga"
+   name="VoiceEffectsExpired"
+   sound="UISndAlert"
+   persist="true"
+   type="notify">
+    <unique/>
+One or more of your subscribed Voice Morphs has expired.
+[[URL] Click here] to renew your subscription.
+  <tag>fail</tag>
+  <tag>voice</tag>
+  </notification>
+
+  <notification
+   icon="notify.tga"
+   name="VoiceEffectsExpiredInUse"
+   sound="UISndAlert"
+   persist="true"
+   type="notify">
+    <unique/>
+The active Voice Morph has expired, your normal voice settings have been applied.
+[[URL] Click here] to renew your subscription.
+    <tag>fail</tag>
+    <tag>voice</tag>
+  </notification>
+
+  <notification
+   icon="notify.tga"
+   name="VoiceEffectsWillExpire"
+   sound="UISndAlert"
+   persist="true"
+   type="notify">
+    <unique/>
+One or more of your Voice Morphs will expire in less than [INTERVAL] days.
+[[URL] Click here] to renew your subscription.
+  <tag>fail</tag>
+    <tag>voice</tag>
+  </notification>
+
+  <notification
+   icon="notify.tga"
+   name="VoiceEffectsNew"
+   sound="UISndAlert"
+   persist="true"
+   type="notify">
+    <unique/>
+New Voice Morphs are available!
+   <tag>voice</tag>
+  </notification>
+
+  <notification
    icon="notifytip.tga"
    name="Cannot enter parcel: not a group member"
    type="notifytip">
@@ -7346,6 +7446,34 @@ An error has occurred while trying to connect to voice chat for [VOICE_CHANNEL_N
     </unique>
   </notification>
 
+ <notification
+   icon="notifytip.tga"
+   name="UnsupportedCommandSLURL"
+   priority="high"
+   type="notifytip">
+The SLurl you clicked on is not supported.
+  <tag>fail</tag>
+  </notification>
+
+ <notification
+   icon="notifytip.tga"
+   name="BlockedSLURL"
+   priority="high"
+   type="notifytip">
+   <tag>security</tag>
+A SLurl was received from an untrusted browser and has been blocked for your security.
+  </notification>
+
+  <notification
+   icon="notifytip.tga"
+   name="ThrottledSLURL"
+   priority="high"
+   type="notifytip">
+   <tag>security</tag>
+Multiple SLurls were received from an untrusted browser within a short period.
+They will be blocked for a few seconds for your security.
+  </notification>
+
   <notification
    duration="10"
    icon="notifytip.tga"
@@ -7354,14 +7482,17 @@ An error has occurred while trying to connect to voice chat for [VOICE_CHANNEL_N
    type="notifytip">
 The region you have entered is running a different simulator version. Click this message for details.
   </notification>
-
-  <notification
-   icon="notifytip.tga"
-   name="UnableToOpenCommandURL"
-   priority="high"
-   type="notifytip">
-The URL you clicked cannot be opened from this web browser.
-  </notification>
+     <notification
+ icon="alertmodal.tga"
+ name="ObjectMediaFailure"
+ type="alertmodal">
+Server Error: Media update or get failed.
+&apos;[ERROR]&apos;
+  <tag>fail</tag>
+        <usetemplate
+         name="okbutton"
+         yestext="OK"/>
+    </notification>
 
   <notification
     name="MeshUploadError"
@@ -7444,6 +7575,23 @@ Avatar '[NAME]' entered appearance mode.
   </notification>
 
   <notification
+   icon="alertmodal.tga"
+   name="NoVoiceConnect"
+   type="alertmodal">
+We're having trouble connecting to your voice server:
+
+[HOSTID]
+
+Voice communications will not be available.
+Please check your network and firewall setup.
+    <tag>voice</tag>
+  <tag>fail</tag>
+    <usetemplate
+     name="okbutton"
+     yestext="OK"/>
+  </notification>
+
+  <notification
    icon="notifytip.tga"
    name="AvatarRezLeftAppearanceNotification"
    type="notifytip">
@@ -7491,6 +7639,23 @@ Your shape, skin, hair or eyes might be defect.
 	<usetemplate
 	 name="okbutton"
 	 yestext="OK"/>
+  </notification>
+
+  <notification
+  name="PopupAttempt"
+  icon="alertmodal.tga"
+  type="browser">
+    A pop-up was prevented from opening.
+    <form name="form">
+      <ignore name="ignore"
+              control="MediaEnablePopups"
+              invert_control="true"
+              text="Enable all pop-ups"/>
+      <button default="true"
+              index="0"
+              name="open"
+              text="Open pop-up window"/>
+    </form>
   </notification>
 
   <notification
@@ -9017,14 +9182,6 @@ Only the first 10 selected objects have been disabled. Refresh and make addition
    type="notify">
    <tag>fail</tag>
 You need to update your viewer to buy this parcel.
-  </notification>
-
-  <notification
-   icon="alertmodal.tga"
-   name="LandBuyAccessBlocked"
-   type="notify">
-   <tag>fail</tag>
-You can't buy this land due to your maturity Rating. You may need to validate your age and/or install the latest Viewer. Please go to the Knowledge Base for details on accessing areas with this maturity Rating.
   </notification>
 
   <notification

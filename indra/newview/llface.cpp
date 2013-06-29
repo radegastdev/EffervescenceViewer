@@ -190,8 +190,9 @@ void LLFace::init(LLDrawable* drawablep, LLViewerObject* objp)
 
 	mImportanceToCamera = 0.f ;
 	mBoundingSphereRadius = 0.0f ;
-}
 
+	mHasMedia = FALSE ;
+}
 
 void LLFace::destroy()
 {
@@ -1066,6 +1067,10 @@ bool LLFace::canRenderAsMask()
 	}
 
 	const LLTextureEntry* te = getTextureEntry();
+	if( !te || !getViewerObject() || !getTexture() )
+	{
+		return false;
+	}
 
 	static const LLCachedControl<bool> use_rmse_auto_mask("SHUseRMSEAutoMask",false);
 	static const LLCachedControl<F32> auto_mask_max_rmse("SHAutoMaskMaxRMSE",.09f);
@@ -1168,6 +1173,15 @@ static LLFastTimer::DeclareTimer FTM_FACE_GEOM_COLOR("Color");
 static LLFastTimer::DeclareTimer FTM_FACE_GEOM_EMISSIVE("Emissive");
 static LLFastTimer::DeclareTimer FTM_FACE_GEOM_WEIGHTS("Weights");
 static LLFastTimer::DeclareTimer FTM_FACE_GEOM_BINORMAL("Binormal");
+
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK("Face Feedback");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_POSITION("Feedback Position");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_NORMAL("Feedback  Normal");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_TEXTURE("Feedback  Texture");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_COLOR("Feedback  Color");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_EMISSIVE("Feedback  Emissive");
+static LLFastTimer::DeclareTimer FTM_FACE_GEOM_FEEDBACK_BINORMAL("Feedback Binormal");
+
 static LLFastTimer::DeclareTimer FTM_FACE_GEOM_INDEX("Index");
 static LLFastTimer::DeclareTimer FTM_FACE_GEOM_INDEX_TAIL("Tail");
 static LLFastTimer::DeclareTimer FTM_FACE_POSITION_STORE("Pos");
@@ -1375,7 +1389,8 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 		!rebuild_weights && //TODO: add support for weights
 		!volume.isUnique()) //source volume is NOT flexi
 	{ //use transform feedback to pack vertex buffer
-
+		LLFastTimer t(FTM_FACE_GEOM_FEEDBACK);
+		LLGLEnable discard(GL_RASTERIZER_DISCARD);
 		LLVertexBuffer* buff = (LLVertexBuffer*) vf.mVertexBuffer.get();
 
 		if (vf.mVertexBuffer.isNull() || buff->getNumVerts() != vf.mNumVertices)
@@ -1392,7 +1407,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_pos)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_POSITION);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_POSITION);
 			gTransformPositionProgram.bind();
 
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_VERTEX, mGeomIndex, mGeomCount);
@@ -1417,7 +1432,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_color)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_COLOR);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_COLOR);
 			gTransformColorProgram.bind();
 			
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_COLOR, mGeomIndex, mGeomCount);
@@ -1433,7 +1448,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_emissive)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_EMISSIVE);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_EMISSIVE);
 			gTransformColorProgram.bind();
 			
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_EMISSIVE, mGeomIndex, mGeomCount);
@@ -1454,7 +1469,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_normal)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_NORMAL);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_NORMAL);
 			gTransformNormalProgram.bind();
 			
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_NORMAL, mGeomIndex, mGeomCount);
@@ -1467,7 +1482,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_binormal)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_BINORMAL);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_BINORMAL);
 			gTransformBinormalProgram.bind();
 			
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_BINORMAL, mGeomIndex, mGeomCount);
@@ -1480,7 +1495,7 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 
 		if (rebuild_tcoord)
 		{
-			LLFastTimer t(FTM_FACE_GEOM_TEXTURE);
+			LLFastTimer t(FTM_FACE_GEOM_FEEDBACK_TEXTURE);
 			gTransformTexCoordProgram.bind();
 			
 			mVertexBuffer->bindForFeedback(0, LLVertexBuffer::TYPE_TEXCOORD0, mGeomIndex, mGeomCount);
@@ -2051,6 +2066,20 @@ BOOL LLFace::getGeometryVolume(const LLVolume& volume,
 	return TRUE;
 }
 
+//check if the face has a media
+BOOL LLFace::hasMedia() const 
+{
+	if(mHasMedia)
+	{
+		return TRUE ;
+	}
+	if(mTexture.notNull()) 
+	{
+		return mTexture->hasParcelMedia() ;  //if has a parcel media
+	}
+
+	return FALSE ; //no media.
+}
 const F32 LEAST_IMPORTANCE = 0.05f ;
 const F32 LEAST_IMPORTANCE_FOR_LARGE_IMAGE = 0.3f ;
 
@@ -2120,7 +2149,7 @@ BOOL LLFace::calcPixelArea(F32& cos_angle_to_view_dir, F32& radius)
 	t.load3(camera->getOrigin().mV);
 	lookAt.setSub(center, t);
 	F32 dist = lookAt.getLength3().getF32();
-	dist = llmax(dist-size.getLength3().getF32(), 0.f);
+	dist = llmax(dist-size.getLength3().getF32(), 0.001f);
 	lookAt.normalize3fast() ;	
 
 	//get area of circle around node
@@ -2131,9 +2160,33 @@ BOOL LLFace::calcPixelArea(F32& cos_angle_to_view_dir, F32& radius)
 	x_axis.load3(camera->getXAxis().mV);
 	cos_angle_to_view_dir = lookAt.dot3(x_axis).getF32();
 
+	//if has media, check if the face is out of the view frustum.	
+	if(hasMedia())
+	{
+		if(!camera->AABBInFrustum(center, size)) 
+		{
+			mImportanceToCamera = 0.f ;
+			return false ;
+		}
+		if(cos_angle_to_view_dir > camera->getCosHalfFov()) //the center is within the view frustum
+		{
+			cos_angle_to_view_dir = 1.0f ;
+		}
+		else
+		{		
+			LLVector4a d;
+			d.setSub(lookAt, x_axis);
+
+			if(dist * dist * d.dot3(d) < size_squared)
+			{
+				cos_angle_to_view_dir = 1.0f ;
+			}
+		}
+	}
+
 	if(dist < mBoundingSphereRadius) //camera is very close
 	{
-		cos_angle_to_view_dir = 1.0f;
+		cos_angle_to_view_dir = 1.0f ;
 		mImportanceToCamera = 1.0f;
 	}
 	else

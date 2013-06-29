@@ -241,10 +241,9 @@ public:
 	void enableResizeBar(BOOL enable);
 	std::string getLabel() { return mOrigLabel; }
 
-	static void onSelectSort(LLUICtrl* ctrl, void* user_data);
-	static void onClick(void* user_data);
-	static void onMouseDown(void* user_data);
-	static void onHeldDown(void* user_data);
+	void onSelectSort();
+	void onClick();
+	void onMouseDown();
 
 private:
 	LLScrollListColumn* mColumn;
@@ -390,8 +389,7 @@ public:
 	LLScrollListCtrl(
 		const std::string& name,
 		const LLRect& rect,
-		void (*commit_callback)(LLUICtrl*, void*),
-		void* callback_userdata,
+		commit_callback_t commit_callback,
 		BOOL allow_multiple_selection,
 		BOOL draw_border = TRUE, bool draw_heading = false);
 
@@ -594,7 +592,7 @@ public:
 	LLRect			getCellRect(S32 row_index, S32 column_index);
 
 	// Used "internally" by the scroll bar.
-	static void		onScrollChange( S32 new_pos, LLScrollbar* src, void* userdata );
+	void			onScrollChange( S32 new_pos, LLScrollbar* src);
 
 	static void onClickColumn(void *userdata);
 

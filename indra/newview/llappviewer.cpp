@@ -53,8 +53,10 @@
 #include "llmarketplacenotifications.h"
 #include "llmd5.h"
 #include "llmeshrepository.h"
+#include "llmodaldialog.h"
 #include "llpumpio.h"
 #include "llmimetypes.h"
+#include "llslurl.h"
 #include "llstartup.h"
 #include "llfocusmgr.h"
 #include "llviewerjoystick.h"
@@ -77,8 +79,9 @@
 #include "llfirstuse.h"
 #include "llrender.h"
 #include "llvector4a.h"
-#include "llimpanel.h" // For LLVoiceClient and LLVoiceChannel
+#include "llvoicechannel.h"
 #include "llvoavatarself.h"
+#include "llurlmatch.h"
 #include "llprogressview.h"
 #include "llvocache.h"
 #include "llvopartgroup.h"
@@ -93,6 +96,8 @@
 #include "llimagej2c.h"
 #include "llmemory.h"
 #include "llprimitive.h"
+#include "llurlaction.h"
+#include "llurlentry.h"
 #include "llnotifications.h"
 #include "llnotificationsutil.h"
 #include <boost/bind.hpp>
@@ -148,7 +153,6 @@
 #include "llworld.h"
 #include "llhudeffecttrail.h"
 #include "llvectorperfoptions.h"
-#include "llurlsimstring.h"
 #include "llwatchdog.h"
 
 // Included so that constants/settings might be initialized
@@ -261,12 +265,6 @@ LLFrameTimer gForegroundTime;
 LLTimer gLogoutTimer;
 static const F32 LOGOUT_REQUEST_TIME = 6.f;  // this will be cut short by the LogoutReply msg.
 F32 gLogoutMaxTime = LOGOUT_REQUEST_TIME;
-
-// <edit>
-LLUUID gSystemFolderRoot;
-LLUUID gSystemFolderSettings;
-LLUUID gSystemFolderAssets;
-// </edit>
 
 BOOL				gDisconnected = FALSE;
 
@@ -646,7 +644,7 @@ bool LLAppViewer::init()
 		AIHTTPTimeoutPolicy policy_tmp(
 			"CurlTimeout* Debug Settings",
 			gSavedSettings.getU32("CurlTimeoutDNSLookup"),
-			gSavedSettings.getU32("CurlTimeoutConnect"),
+			/*gSavedSettings.getU32("CurlTimeoutConnect")   Temporary HACK: 30 is the current max*/ 30,
 			gSavedSettings.getU32("CurlTimeoutReplyDelay"),
 			gSavedSettings.getU32("CurlTimeoutLowSpeedTime"),
 			gSavedSettings.getU32("CurlTimeoutLowSpeedLimit"),
@@ -688,6 +686,7 @@ bool LLAppViewer::init()
 
 	// Widget construction depends on LLUI being initialized
 	LLUI::initClass(&gSavedSettings,
+		&gSavedPerAccountSettings,
 		&gSavedSettings,
 		&gColors,
 		LLUIImageList::getInstance(),
@@ -753,9 +752,11 @@ bool LLAppViewer::init()
 	
 	LLWeb::initClass();			  // do this after LLUI
 
-	LLTextEditor::setURLCallbacks(&LLWeb::loadURL,
-				&LLURLDispatcher::dispatchFromTextEditor,
-				&LLURLDispatcher::dispatchFromTextEditor);
+	// Provide the text fields with callbacks for opening Urls
+	LLUrlAction::setOpenURLCallback(boost::bind(&LLWeb::loadURL, _1, LLStringUtil::null, LLStringUtil::null));
+	LLUrlAction::setOpenURLInternalCallback(boost::bind(&LLWeb::loadURLInternal, _1, LLStringUtil::null, LLStringUtil::null));
+	LLUrlAction::setOpenURLExternalCallback(boost::bind(&LLWeb::loadURLExternal, _1, true, LLStringUtil::null));
+	LLUrlAction::setExecuteSLURLCallback(&LLURLDispatcher::dispatchFromTextEditor);
 	
 	LLToolMgr::getInstance(); // Initialize tool manager if not already instantiated
 		
@@ -973,6 +974,8 @@ bool LLAppViewer::init()
 	LLEnvManagerNew::instance().usePrefs();
 
 	gGLActive = FALSE;
+	LLViewerMedia::initClass();
+	LL_INFOS("InitInfo") << "Viewer media initialized." << LL_ENDL ;
 	return true;
 }
 
@@ -1093,7 +1096,7 @@ bool LLAppViewer::mainLoop()
 	// Note: this is where gLocalSpeakerMgr and gActiveSpeakerMgr used to be instantiated.
 
 	LLVoiceChannel::initClass();
-	LLVoiceClient::init(gServicePump);
+	LLVoiceClient::getInstance()->init(gServicePump);
 				
 	LLTimer frameTimer,idleTimer,periodicRenderingTimer;
 	LLTimer debugTime;
@@ -1450,7 +1453,7 @@ bool LLAppViewer::cleanup()
 	// to ensure shutdown order
 	LLMortician::setZealous(TRUE);
 
-	LLVoiceClient::terminate();
+	LLVoiceClient::getInstance()->terminate();
 	
 	disconnectViewer();
 
@@ -1699,8 +1702,7 @@ bool LLAppViewer::cleanup()
 	if (mPurgeOnExit)
 	{
 		llinfos << "Purging all cache files on exit" << llendflush;
-		std::string mask = gDirUtilp->getDirDelimiter() + "*.*";
-		gDirUtilp->deleteFilesInDir(gDirUtilp->getExpandedFilename(LL_PATH_CACHE,""),mask);
+		gDirUtilp->deleteFilesInDir(gDirUtilp->getExpandedFilename(LL_PATH_CACHE,""),"*.*");
 	}
 
 	removeMarkerFile(); // Any crashes from here on we'll just have to ignore
@@ -1777,7 +1779,6 @@ bool LLAppViewer::cleanup()
 	//Note:
 	//LLViewerMedia::cleanupClass() has to be put before gTextureList.shutdown()
 	//because some new image might be generated during cleaning up media. --bao
-	LLViewerMediaFocus::cleanupClass();
 	LLViewerMedia::cleanupClass();
 	LLViewerParcelMedia::cleanupClass();
 	gTextureList.shutdown(); // shutdown again in case a callback added something
@@ -2327,30 +2328,17 @@ bool LLAppViewer::initConfiguration()
     // injection and steal passwords. Phoenix. SL-55321
     if(clp.hasOption("url"))
     {
-        std::string slurl = clp.getOption("url")[0];
-        if (LLURLDispatcher::isSLURLCommand(slurl))
-        {
-	        LLStartUp::sSLURLCommand = slurl;
-        }
-        else
-        {
-	        LLURLSimString::setString(slurl);
-        }
+		LLStartUp::setStartSLURL(LLSLURL(clp.getOption("url")[0]));
+		if(LLStartUp::getStartSLURL().getType() == LLSLURL::LOCATION) 
+		{  
+			gHippoGridManager->setCurrentGrid(LLStartUp::getStartSLURL().getGrid());
+			
+		}  
     }
     else if(clp.hasOption("slurl"))
     {
-        std::string slurl = clp.getOption("slurl")[0];
-        if(LLURLDispatcher::isSLURL(slurl))
-        {
-            if (LLURLDispatcher::isSLURLCommand(slurl))
-            {
-	            LLStartUp::sSLURLCommand = slurl;
-            }
-            else
-            {
-	            LLURLSimString::setString(slurl);
-            }
-        }
+		LLSLURL start_slurl(clp.getOption("slurl")[0]);
+		LLStartUp::setStartSLURL(start_slurl);
     }
 
     const LLControlVariable* skinfolder = gSavedSettings.getControl("SkinCurrent");
@@ -2429,18 +2417,11 @@ bool LLAppViewer::initConfiguration()
 	// don't call anotherInstanceRunning() when doing URL handoff, as
 	// it relies on checking a marker file which will not work when running
 	// out of different directories
-	std::string slurl;
-	if (!LLStartUp::sSLURLCommand.empty())
+
+	if (LLStartUp::getStartSLURL().isValid() &&
+		(gSavedSettings.getBOOL("SLURLPassToOtherInstance")))
 	{
-		slurl = LLStartUp::sSLURLCommand;
-	}
-	else if (LLURLSimString::parse())
-	{
-		slurl = LLURLSimString::getURL();
-	}
-	if (!slurl.empty())
-	{
-		if (sendURLToOtherInstance(slurl))
+		if (sendURLToOtherInstance(LLStartUp::getStartSLURL().getSLURLString()))
 		{
 			// successfully handed off URL to existing instance, exit
 			return false;
@@ -2496,9 +2477,10 @@ bool LLAppViewer::initConfiguration()
 
    	// need to do this here - need to have initialized global settings first
 	std::string nextLoginLocation = gSavedSettings.getString( "NextLoginLocation" );
-	if ( nextLoginLocation.length() )
+	if ( !nextLoginLocation.empty() )
 	{
-		LLURLSimString::setString( nextLoginLocation );
+		LL_DEBUGS("AppInit")<<"set start from NextLoginLocation: "<<nextLoginLocation<<LL_ENDL;
+		LLStartUp::setStartSLURL(LLSLURL(nextLoginLocation));
 	}
 
 	gLastRunVersion = gSavedSettings.getString("LastRunVersion");
@@ -2682,8 +2664,7 @@ void LLAppViewer::cleanupSavedSettings()
 
 void LLAppViewer::removeCacheFiles(const std::string& file_mask)
 {
-	std::string mask = gDirUtilp->getDirDelimiter() + file_mask;
-	gDirUtilp->deleteFilesInDir(gDirUtilp->getExpandedFilename(LL_PATH_CACHE, ""), mask);
+	gDirUtilp->deleteFilesInDir(gDirUtilp->getExpandedFilename(LL_PATH_CACHE, ""), file_mask);
 }
 
 void LLAppViewer::writeSystemInfo()
@@ -4268,8 +4249,10 @@ void LLAppViewer::sendLogoutRequest()
 		gLogoutMaxTime = LOGOUT_REQUEST_TIME;
 		mLogoutRequestSent = TRUE;
 		
-		if(gVoiceClient)
-			gVoiceClient->leaveChannel();
+		if(LLVoiceClient::instanceExists())
+		{
+			LLVoiceClient::getInstance()->leaveChannel();
+		}
 
 		//Set internal status variables and marker files
 		gLogoutInProgress = TRUE;

@@ -662,13 +662,12 @@ public:
 //---------------------------------------------------------------------------
 
 LLScrollListCtrl::LLScrollListCtrl(const std::string& name, const LLRect& rect,
-	void (*commit_callback)(LLUICtrl* ctrl, void* userdata),
-	void* callback_user_data,
+	commit_callback_t commit_callback,
 	BOOL allow_multiple_selection,
 	BOOL show_border,
 	bool draw_heading
 	)
- :	LLUICtrl(name, rect, TRUE, commit_callback, callback_user_data),
+ :	LLUICtrl(name, rect, TRUE, commit_callback),
 	mLineHeight(0),
 	mScrollLines(0),
 	mMouseWheelOpaque(true),
@@ -735,7 +734,7 @@ LLScrollListCtrl::LLScrollListCtrl(const std::string& name, const LLRect& rect,
 								  getItemCount(),
 								  mScrollLines,
 								  getLinesPerPage(),
-								  &LLScrollListCtrl::onScrollChange, this );
+								  boost::bind(&LLScrollListCtrl::onScrollChange, this, _1, _2) );
 	mScrollbar->setFollowsRight();
 	mScrollbar->setFollowsTop();
 	mScrollbar->setFollowsBottom();
@@ -2853,11 +2852,9 @@ S32	LLScrollListCtrl::getLinesPerPage()
 }
 
 // Called by scrollbar
-//static
-void LLScrollListCtrl::onScrollChange( S32 new_pos, LLScrollbar* scrollbar, void* userdata )
+void LLScrollListCtrl::onScrollChange( S32 new_pos, LLScrollbar* scrollbar )
 {
-	LLScrollListCtrl* self = (LLScrollListCtrl*) userdata;
-	self->mScrollLines = new_pos;
+	mScrollLines = new_pos;
 }
 
 
@@ -2932,7 +2929,7 @@ void LLScrollListCtrl::setScrollPos( S32 pos )
 {
 	mScrollbar->setDocPos( pos );
 
-	onScrollChange(mScrollbar->getDocPos(), mScrollbar, this);
+	onScrollChange(mScrollbar->getDocPos(), mScrollbar);
 }
 
 
@@ -3107,9 +3104,6 @@ void LLScrollListCtrl::setScrollListParameters(LLXMLNodePtr node)
 // static
 LLView* LLScrollListCtrl::fromXML(LLXMLNodePtr node, LLView *parent, LLUICtrlFactory *factory)
 {
-	std::string name("scroll_list");
-	node->getAttributeString("name", name);
-
 	LLRect rect;
 	createRect(node, rect, parent, LLRect());
 
@@ -3134,12 +3128,9 @@ LLView* LLScrollListCtrl::fromXML(LLXMLNodePtr node, LLView *parent, LLUICtrlFac
 	BOOL mouse_wheel_opaque = TRUE;
 	node->getAttributeBOOL("mouse_wheel_opaque", mouse_wheel_opaque);
 
-	LLUICtrlCallback callback = NULL;
-
 	LLScrollListCtrl* scroll_list = new LLScrollListCtrl(
-		name,
+		"scroll_list",
 		rect,
-		callback,
 		NULL,
 		multi_select,
 		draw_border,
@@ -3868,23 +3859,21 @@ void LLScrollListCtrl::onFocusLost()
 }
 
 LLScrollColumnHeader::LLScrollColumnHeader(const std::string& label, const LLRect &rect, LLScrollListColumn* column, const LLFontGL* fontp) : 
-	LLComboBox(label, rect, label, NULL, NULL), 
+	LLComboBox(label, rect, label), 
 	mColumn(column),
 	mOrigLabel(label),
 	mShowSortOptions(FALSE),
 	mHasResizableElement(FALSE)
 {
 	mListPosition = LLComboBox::ABOVE;
-	setCommitCallback(onSelectSort);
-	setCallbackUserData(this);
+	setCommitCallback(boost::bind(&LLScrollColumnHeader::onSelectSort, this));
 	mButton->setTabStop(FALSE);
 	// require at least two frames between mouse down and mouse up event to capture intentional "hold" not just bad framerate
 	mButton->setHeldDownDelay(LLUI::sConfigGroup->getF32("ColumnHeaderDropDownDelay"), 2);
-	mButton->setHeldDownCallback(boost::bind(&LLScrollColumnHeader::onHeldDown, this));
+	mButton->setHeldDownCallback(boost::bind(&LLScrollColumnHeader::showList, this));
 	mButton->setClickedCallback(boost::bind(&LLScrollColumnHeader::onClick, this));
 	mButton->setMouseDownCallback(boost::bind(&LLScrollColumnHeader::onMouseDown, this));
 
-	mButton->setCallbackUserData(this);
 	mButton->setToolTip(label);
 
 	mAscendingText = std::string("[LOW]...[HIGH](Ascending)"); // *TODO: Translate
@@ -3894,11 +3883,14 @@ LLScrollColumnHeader::LLScrollColumnHeader(const std::string& label, const LLRec
 
 	// resize handles on left and right
 	const S32 RESIZE_BAR_THICKNESS = 3;
-	mResizeBar = new LLResizeBar( 
-		std::string("resizebar"),
-		this,
-		LLRect( getRect().getWidth() - RESIZE_BAR_THICKNESS, getRect().getHeight(), getRect().getWidth(), 0), 
-		MIN_COLUMN_WIDTH, S32_MAX, LLResizeBar::RIGHT );
+	LLResizeBar::Params p;
+	p.name = "resizebar";
+	p.resizing_view = this;
+	p.rect = LLRect( getRect().getWidth() - RESIZE_BAR_THICKNESS, getRect().getHeight(), getRect().getWidth(), 0);
+	p.min_size = MIN_COLUMN_WIDTH;
+	p.max_size = S32_MAX;
+	p.side = LLResizeBar::RIGHT;
+	mResizeBar = LLUICtrlFactory::create<LLResizeBar>(p);
 	addChild(mResizeBar);
 
 	mResizeBar->setEnabled(FALSE);
@@ -4040,7 +4032,7 @@ BOOL LLScrollColumnHeader::handleDoubleClick(S32 x, S32 y, MASK mask)
 	}
 	else
 	{
-		onClick(this);
+		onClick();
 	}
 	return TRUE;
 }
@@ -4068,40 +4060,27 @@ void LLScrollColumnHeader::setImageOverlay(const std::string &image_name, LLFont
 	}
 }
 
-//static
-void LLScrollColumnHeader::onClick(void* user_data)
+void LLScrollColumnHeader::onClick()
 {
-	LLScrollColumnHeader* headerp = (LLScrollColumnHeader*)user_data;
-	if (!headerp) return;
+	if (!mColumn) return;
 
-	LLScrollListColumn* column = headerp->mColumn;
-	if (!column) return;
-
-	if (headerp->mList->getVisible())
+	if (mList->getVisible())
 	{
-		headerp->hideList();
+		hideList();
 	}
 
-	LLScrollListCtrl::onClickColumn(column);
+	LLScrollListCtrl::onClickColumn(mColumn);
 
 	// propagate new sort order to sort order list
-	headerp->mList->selectNthItem(column->mParentCtrl->getSortAscending() ? 0 : 1);
+	mList->selectNthItem(mColumn->mParentCtrl->getSortAscending() ? 0 : 1);
 
-	headerp->mList->setFocus(TRUE);
+	mList->setFocus(TRUE);
 }
 
-//static
-void LLScrollColumnHeader::onMouseDown(void* user_data)
+void LLScrollColumnHeader::onMouseDown()
 {
 	// for now, do nothing but block the normal showList() behavior
 	return;
-}
-
-//static
-void LLScrollColumnHeader::onHeldDown(void* user_data)
-{
-	LLScrollColumnHeader* headerp = (LLScrollColumnHeader*)user_data;
-	headerp->showList();
 }
 
 void LLScrollColumnHeader::showList()
@@ -4186,30 +4165,25 @@ void LLScrollColumnHeader::showList()
 	}
 }
 
-//static 
-void LLScrollColumnHeader::onSelectSort(LLUICtrl* ctrl, void* user_data)
+void LLScrollColumnHeader::onSelectSort()
 {
-	LLScrollColumnHeader* headerp = (LLScrollColumnHeader*)user_data;
-	if (!headerp) return;
-
-	LLScrollListColumn* column = headerp->mColumn;
-	if (!column) return;
-	LLScrollListCtrl *parent = column->mParentCtrl;
+	if (!mColumn) return;
+	LLScrollListCtrl* parent = mColumn->mParentCtrl;
 	if (!parent) return;
 
-	if (headerp->getCurrentIndex() == 0)
+	if (getCurrentIndex() == 0)
 	{
 		// ascending
-		parent->sortByColumn(column->mSortingColumn, TRUE);
+		parent->sortByColumn(mColumn->mSortingColumn, TRUE);
 	}
 	else
 	{
 		// descending
-		parent->sortByColumn(column->mSortingColumn, FALSE);
+		parent->sortByColumn(mColumn->mSortingColumn, FALSE);
 	}
 
 	// restore original column header
-	headerp->setLabel(headerp->mOrigLabel);
+	setLabel(mOrigLabel);
 }
 
 LLView*	LLScrollColumnHeader::findSnapEdge(S32& new_edge_val, const LLCoordGL& mouse_dir, ESnapEdge snap_edge, ESnapType snap_type, S32 threshold, S32 padding)

@@ -43,6 +43,7 @@
 #include "llfirstuse.h"
 #include "llfloatercamera.h"
 #include "llfloatertools.h"
+#include "llgroupactions.h"
 #include "llgroupmgr.h"
 #include "llhomelocationresponder.h"
 #include "llhudmanager.h"
@@ -56,13 +57,17 @@
 #include "llsdmessage.h"
 #include "llsdutil.h"
 #include "llsky.h"
+#include "llslurl.h"
 #include "llsmoothstep.h"
+#include "llspeakers.h"
 #include "llstartup.h"
 #include "llstatusbar.h"
 #include "lltool.h"
 #include "lltoolpie.h"
 #include "lltoolmgr.h"
 #include "lltrans.h"
+#include "lluictrl.h"
+#include "llurlentry.h"
 #include "llviewercontrol.h"
 #include "llviewerdisplay.h"
 #include "llviewerjoystick.h"
@@ -75,6 +80,7 @@
 #include "llviewerstats.h"
 #include "llviewerwindow.h"
 #include "llvoavatarself.h"
+#include "llvoiceclient.h"
 #include "llworld.h"
 #include "llworldmap.h"
 #include "llworldmapmessage.h"
@@ -83,11 +89,9 @@
 #include "llurldispatcher.h"
 #include "llimview.h" //For gIMMgr
 //Floaters
-#include "llfloateractivespeakers.h"
 #include "llfloateravatarinfo.h"
 #include "llfloaterchat.h"
 #include "llfloaterdirectory.h"
-#include "llfloatergroupinfo.h"
 #include "llfloatergroups.h"
 #include "llfloaterland.h"
 #include "llfloatermap.h"
@@ -259,6 +263,56 @@ void LLAgent::parcelChangedCallback()
 	gAgent.mCanEditParcel = can_edit;
 }
 
+// static
+bool LLAgent::isActionAllowed(const LLSD& sdname)
+{
+	bool retval = false;
+
+	const std::string& param = sdname.asString();
+
+	if (param == "speak")
+	{
+		if ( gAgent.isVoiceConnected() &&
+			LLViewerParcelMgr::getInstance()->allowAgentVoice() &&
+				! LLVoiceClient::getInstance()->inTuningMode() )
+		{
+			retval = true;
+		}
+		else
+		{
+			retval = false;
+		}
+	}
+
+	return retval;
+}
+
+// static
+void LLAgent::pressMicrophone(const LLSD& name)
+{
+	//LLFirstUse::speak(false);
+
+	LLVoiceClient::getInstance()->inputUserControlState(true);
+}
+
+// static
+void LLAgent::releaseMicrophone(const LLSD& name)
+{
+	LLVoiceClient::getInstance()->inputUserControlState(false);
+}
+
+// static
+void LLAgent::toggleMicrophone(const LLSD& name)
+{
+	LLVoiceClient::getInstance()->toggleUserPTTState();
+}
+
+// static
+bool LLAgent::isMicrophoneOn(const LLSD& sdname)
+{
+	return LLVoiceClient::getInstance()->getUserPTTState();
+}
+
 // ************************************************************
 // Enabled this definition to compile a 'hacked' viewer that
 // locally believes the end user has godlike powers.
@@ -294,6 +348,7 @@ LLAgent::LLAgent() :
 	mAgentAccess(new LLAgentAccess(gSavedSettings)),
 	mGodLevelChangeSignal(),
 	mCanEditParcel(false),
+	mTeleportSourceSLURL(new LLSLURL),
 	mTeleportRequest(),
 	mTeleportFinishedSlot(),
 	mTeleportFailedSlot(),
@@ -434,6 +489,8 @@ LLAgent::~LLAgent()
 	mAgentAccess = NULL;
 	delete mEffectColor;
 	mEffectColor = NULL;
+	delete mTeleportSourceSLURL;
+	mTeleportSourceSLURL = NULL;
 }
 
 // Handle any actions that need to be performed when the main app gains focus
@@ -666,11 +723,13 @@ void LLAgent::setFlying(BOOL fly)
 			return;
 		}
 
+		/* Singu Note: We don't take off while sitting, don't bother with this check, let us toggle fly whenever.
 		// don't allow taking off while sitting
 		if (fly && gAgentAvatarp->isSitting())
 		{
 			return;
 		}
+		*/
 	}
 
 	if (fly)
@@ -883,11 +942,6 @@ void LLAgent::setRegion(LLViewerRegion *regionp)
 //-----------------------------------------------------------------------------
 // getRegion()
 //-----------------------------------------------------------------------------
-LLViewerRegion *LLAgent::getRegion() const
-{
-	return mRegionp;
-}
-
 
 const LLHost& LLAgent::getRegionHost() const
 {
@@ -901,24 +955,6 @@ const LLHost& LLAgent::getRegionHost() const
 	}
 }
 
-//-----------------------------------------------------------------------------
-// getSLURL()
-// returns empty() if getRegion() == NULL
-//-----------------------------------------------------------------------------
-std::string LLAgent::getSLURL() const
-{
-	std::string slurl;
-	LLViewerRegion *regionp = getRegion();
-	if (regionp)
-	{
-		LLVector3d agentPos = getPositionGlobal();
-		S32 x = llround( (F32)fmod( agentPos.mdV[VX], (F64)REGION_WIDTH_METERS ) );
-		S32 y = llround( (F32)fmod( agentPos.mdV[VY], (F64)REGION_WIDTH_METERS ) );
-		S32 z = llround( (F32)agentPos.mdV[VZ] );
-		slurl = LLURLDispatcher::buildSLURL(regionp->getName(), x, y, z);
-	}
-	return slurl;
-}
 
 //-----------------------------------------------------------------------------
 // inPrelude()
@@ -3250,7 +3286,7 @@ BOOL LLAgent::downGrabbed() const
 
 void update_group_floaters(const LLUUID& group_id)
 {
-	LLFloaterGroupInfo::refreshGroup(group_id);
+	LLGroupActions::refresh(group_id);
 
 	// update avatar info
 	LLFloaterAvatarInfo* fa = LLFloaterAvatarInfo::getInstance(gAgent.getID());
@@ -3303,7 +3339,7 @@ void LLAgent::processAgentDropGroup(LLMessageSystem *msg, void **)
 
 		LLGroupMgr::getInstance()->clearGroupData(group_id);
 		// close the floater for this group, if any.
-		LLFloaterGroupInfo::closeGroup(group_id);
+		LLGroupActions::closeGroup(group_id);
 		// refresh the group panel of the search window, if necessary.
 		LLFloaterDirectory::refreshGroup(group_id);
 	}
@@ -3382,7 +3418,7 @@ class LLAgentDropGroupViewerNode : public LLHTTPNode
 
 				LLGroupMgr::getInstance()->clearGroupData(group_id);
 				// close the floater for this group, if any.
-				LLFloaterGroupInfo::closeGroup(group_id);
+				LLGroupActions::closeGroup(group_id);
 				// refresh the group panel of the search window,
 				//if necessary.
 				LLFloaterDirectory::refreshGroup(group_id);
@@ -3868,7 +3904,7 @@ bool LLAgent::teleportCore(bool is_local)
 	LLFloaterLand::hideInstance();
 
 	LLViewerParcelMgr::getInstance()->deselectLand();
-	LLViewerMediaFocus::getInstance()->setFocusFace(false, NULL, 0, NULL);
+	LLViewerMediaFocus::getInstance()->clearFocus();
 
 	// Close all pie menus, deselect land, etc.
 	// Don't change the camera until we know teleport succeeded. JC
@@ -3911,7 +3947,7 @@ bool LLAgent::teleportCore(bool is_local)
 	
 	// MBW -- Let the voice client know a teleport has begun so it can leave the existing channel.
 	// This was breaking the case of teleporting within a single sim.  Backing it out for now.
-//	gVoiceClient->leaveChannel();
+//	LLVoiceClient::getInstance()->leaveChannel();
 	
 	return true;
 }
@@ -4260,7 +4296,7 @@ void LLAgent::setTeleportState(ETeleportState state)
 
 		case TELEPORT_MOVING:
 		// We're outa here. Save "back" slurl.
-		mTeleportSourceSLURL = getSLURL();
+		LLAgentUI::buildSLURL(*mTeleportSourceSLURL);
 			break;
 
 		case TELEPORT_ARRIVING:
@@ -4686,6 +4722,10 @@ void LLAgent::parseTeleportMessages(const std::string& xml_filename)
 	}//end for (all message sets in xml file)
 }
 
+const void LLAgent::getTeleportSourceSLURL(LLSLURL& slurl) const
+{
+	slurl = *mTeleportSourceSLURL;
+}
 
 void LLAgent::sendAgentUpdateUserInfo(bool im_via_email, const std::string& directory_visibility )
 {
@@ -4739,14 +4779,13 @@ void LLAgent::renderAutoPilotTarget()
 	}
 }
 
-void LLAgent::showLureDestination(const std::string fromname, const int global_x, const int global_y, const int x, const int y, const int z, const std::string maturity)
+void LLAgent::showLureDestination(const std::string fromname, U64& handle, U32 x, U32 y, U32 z)
 {
-	const LLVector3d posglobal = LLVector3d(F64(global_x), F64(global_y), F64(0));
-	LLSimInfo* siminfo = LLWorldMap::getInstance()->simInfoFromPosGlobal(posglobal);
+	LLSimInfo* siminfo = LLWorldMap::getInstance()->simInfoFromHandle(handle);
 
 	if(mPendingLure)
 		delete mPendingLure;
-	mPendingLure = new SHLureRequest(fromname,posglobal,x,y,z);
+	mPendingLure = new SHLureRequest(fromname,handle,x,y,z);
 
 	if(siminfo) //We already have an entry? Go right on to displaying it.
 	{
@@ -4754,8 +4793,8 @@ void LLAgent::showLureDestination(const std::string fromname, const int global_x
 	}
 	else
 	{
-		U16 grid_x = (U16)(global_x / REGION_WIDTH_UNITS);
-		U16 grid_y = (U16)(global_y / REGION_WIDTH_UNITS);
+		U32 grid_x, grid_y;
+		grid_from_region_handle(handle,&grid_x,&grid_y);
 		LLWorldMapMessage::getInstance()->sendMapBlockRequest(grid_x, grid_y, grid_x, grid_y, true); //Will call onFoundLureDestination on response
 	}
 }
@@ -4766,7 +4805,7 @@ void LLAgent::onFoundLureDestination(LLSimInfo *siminfo)
 		return; 
 
 	if(!siminfo)
-		siminfo = LLWorldMap::getInstance()->simInfoFromPosGlobal(mPendingLure->mPosGlobal);
+		siminfo = LLWorldMap::getInstance()->simInfoFromHandle(mPendingLure->mRegionHandle);
 	if(siminfo)
 	{
 		const std::string sim_name = siminfo->getName();
@@ -4775,7 +4814,7 @@ void LLAgent::onFoundLureDestination(LLSimInfo *siminfo)
 		llinfos << mPendingLure->mAvatarName << "'s teleport lure is to " << sim_name << " (" << maturity << ")" << llendl;
 		LLStringUtil::format_map_t args;
 		args["[NAME]"] = mPendingLure->mAvatarName;
-		args["[DESTINATION]"] = LLURLDispatcher::buildSLURL(sim_name, (S32)mPendingLure->mPosLocal[0], (S32)mPendingLure->mPosLocal[1], (S32)mPendingLure->mPosLocal[2] );
+		args["[DESTINATION]"] = LLSLURL(sim_name,mPendingLure->mPosLocal).getSLURLString();
 		std::string msg = LLTrans::getString("TeleportOfferMaturity", args);
 		if (!maturity.empty())
 		{

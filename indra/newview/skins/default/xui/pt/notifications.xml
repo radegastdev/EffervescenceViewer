@@ -274,6 +274,11 @@ Outros residentes podem visitar a URL que você definiu, quando eles olharem seu
 Deseja prosseguir?
 		<usetemplate name="okcancelbuttons" notext="Cancelar" yestext="Unir-se"/>
 	</notification>
+	<notification name="JoinGroupNoCost">
+		Você está prestes a entrar no grupo [NAME].
+Deseja continuar?
+		<usetemplate name="okcancelbuttons" notext="Cancelar" yestext="Entrar"/>
+	</notification>
 	<notification name="JoinGroupCannotAfford">
 		Associar-se a este grupo custa [CURRENCY][COST].
 Você não tem [CURRENCY] suficientes para associar-se a este grupo.
@@ -1146,13 +1151,6 @@ Você ainda pode olhar o bate-papo e as mensagens instantâneas existentes, clic
 Você não tem permissão para comprar o terreno para o seu grupo ativado.
 	</notification>
 
-	<notification label="Adicionar amigo" name="AddFriend">
-		Amigos podem dar permissões de rastrear um ao outro pelo mapa e receber atualizações de status online.
-
-Oferecer amizade para [NAME]?
-		<usetemplate name="okcancelbuttons" notext="Cancelar" yestext="Oferecer"/>
-	</notification>
-
 	<notification label="Adicionar amigo" name="AddFriendWithMessage">
 		Amigos podem dar permissões de rastrear um ao outro pelo mapa e receber atualizações de status online.
 
@@ -1359,7 +1357,7 @@ Por favor, escolha se o seu avatar é feminino ou masculino. Você pode mudar de
 	</notification>
 
 	<notification name="NotEnoughCurrency">
-		[NAME] L$ [PRICE] Você não possui suficientes [CURRENCY] para fazer isso.
+		[NAME] [CURRENCY] [PRICE] Você não possui suficientes [CURRENCY] para fazer isso.
 	</notification>
 
 	<notification name="GrantedModifyRights">
@@ -1630,6 +1628,11 @@ Bate-papo e mensagens instantâneas serão escondidas. Mensagens instantâneas i
 		<usetemplate name="okcancelbuttons" notext="Recusar" yestext="Entrar"/>
 	</notification>
 
+	<notification name="JoinedTooManyGroups">
+		Você atingiu o limite máximo de grupos. Sai de um grupo para entrar ou criar outro.
+		<usetemplate name="okbutton" yestext="OK"/>
+	</notification>
+
 	<notification name="KickUser">
 		Expulsar este usuário com qual mensagem?
 		<form name="form">
@@ -1722,7 +1725,7 @@ Proceder?
 	<notification label="Mudar o acesso à propriedade Linden" name="ChangeLindenAccess">
 		Você está prestes a mudar a lista de acessos de uma propriedade pertencente a Linden (continente, teen grid, orientação, etc.).
 
-Isto é PERIGOSO e deveria ser feito apenas para utilizar uma brecha que permita que objetos/L$ sejam transferidos para dentro/fora da grade.
+Isto é PERIGOSO e deveria ser feito apenas para utilizar uma brecha que permita que objetos/[CURRENCY] sejam transferidos para dentro/fora da grade.
 Isto mudará milhares de regiões e fará o spaceserver soluçar.
 		<usetemplate name="okcancelbuttons" notext="Cancelar" yestext="OK"/>
 	</notification>
@@ -2297,27 +2300,9 @@ O dono da região resolverá as reportagens baseado nas regras locais desta regi
 A resolução desta reportagem se aplica apenas a esta região; o acesso de Residentes às outras áreas do [SECOND_LIFE_GRID] não será afetado pelas decisões desta reportagem. Apenas a [GRID_OWNER] pode restringir acesso a todo o [SECOND_LIFE_GRID].
 	</notification>
 
-	<notification name="HelpReportBug">
-		Use esta ferramenta para reportar *apenas* características técnicas que não atuem como descrito ou esperado.
-Por favor, forneça tantos detalhes quanto possível. Você pode responder ao e-mail de resposta automática para adicionar mais detalhes à sua reportagem.
-
-Todas as reportagens de bugs são investigadas e avaliadas. Nenhum e-mail de resposta será enviado.
-
-Se você estiver tendo uma dificuldade técnica, por favor contate o Suporte em:
-
-http://secondlife.com/community/support.php
-
-Nota: reportagens incompletas não serão investigadas
-	</notification>
-
 	<notification name="HelpReportAbuseSelectCategory">
 		Por favor, selecione uma categoria para a reportagem deste abuso.
 A seleção de uma categoria nos ajuda a arquivar e processar as reportagens de abuso.
-	</notification>
-
-	<notification name="HelpReportBugSelectCategory">
-		Por favor, selecione uma categoria para este bug.
-A seleção de uma categoria nos ajuda a arquivar e processar as reportagens de bugs.
 	</notification>
 
 	<notification name="HelpReportAbuseAbuserNameEmpty">
@@ -2335,20 +2320,10 @@ Entrando com um valor preciso, nos ajuda a arquivar e processar as reportagens d
 Fazer um resumo detalhado nos ajuda a arquivar e processar as reportagens de abuso.
 	</notification>
 
-	<notification name="HelpReportBugSummaryEmpty">
-		Por favor, digite um resumo do bug. Realizar um resumo detalhado nos ajuda a arquivar e processar as reportagens de abuso.
-	</notification>
-
 	<notification name="HelpReportAbuseDetailsEmpty">
 		Por favor, digite uma descrição detalhada do abuso que ocorreu.
 Seja tão específico quanto você puder, incluindo nomes e os detalhes do incidente que está denunciando.
 Fazer uma descrição precisa nos ajuda a arquivar e processar as reportagens de abuso.
-	</notification>
-
-	<notification name="HelpReportBugDetailsEmpty">
-		Por favor, digite uma descrição detalhada do bug.
-Seja tão específico quanto você puder, incluindo as etapas para reproduzir o bug, se possível.
-Fazer uma descrição precisa nos ajuda a arquivar e processar os relatórios de bugs.
 	</notification>
 
 	<notification name="HelpReportAbuseContainsCopyright">
@@ -3202,6 +3177,10 @@ Por favor, tente novamente em alguns instantes.
 		</form>
 	</notification>
 
+	<notification name="FriendshipOffered">
+		Você convidou [TO_NAME] para ser seu amigo(a)
+	</notification>
+
 	<notification name="OfferFriendshipNoMessage">
 		[NAME] está lhe oferecendo sua amizade.
 
@@ -3305,6 +3284,15 @@ Autorizar este pedido?
 		</form>
 	</notification>
 
+	<notification name="NoVoiceConnect">
+		Estamos tendo problemas de conexão com o seu servidor de voz:
+
+[HOSTID]
+
+Talvez não seja possível se comunicar via voz.
+Verifique a configuração da sua rede e firewall.
+		<usetemplate name="okbutton" yestext="OK"/>
+	</notification>
 
 	<notification name="FirstBalanceIncrease">
 		Você recebeu uma quantia de [CURRENCY][AMOUNT].
@@ -3482,6 +3470,25 @@ Clique Aceitar para juntar-se à chamada ou Recusar para recusar o convite. Cliq
 
 	<notification name="VoiceLoginRetry">
 		Estamos criando uma canal de voz para você. Isto pode levar até um minuto.
+	</notification>
+
+	<notification name="VoiceEffectsExpired">
+		Um ou mais serviços de distorção de voz que você assinou veceu.
+[[URL] Clique aqui] para renovar o serviço.
+	</notification>
+
+	<notification name="VoiceEffectsExpiredInUse">
+		A Distorção de voz ativa expirou. Suas configurações de voz padrão foram ativadas.
+[[URL] Clique aqui] para renovar o serviço.
+	</notification>
+
+	<notification name="VoiceEffectsWillExpire">
+		Uma ou mais das suas distorções de voz tem vencimento em menos de [INTERVAL] dias.
+[[URL] Clique aqui] para renovar o serviço.
+	</notification>
+
+	<notification name="VoiceEffectsNew">
+		Novas Distorções de voz!
 	</notification>
 
 	<notification name="Cannot enter parcel: not a group member">

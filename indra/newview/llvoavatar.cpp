@@ -126,6 +126,7 @@
 #pragma warning (disable:4702)
 #endif
 
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/lexical_cast.hpp>
 
 using namespace LLAvatarAppearanceDefines;
@@ -1004,6 +1005,8 @@ LLVOAvatar::LLVOAvatar(const LLUUID& id,
 	mCCSChatTextOverride(false)
 	// </edit>
 {
+	mAttachedObjectsVector.reserve(MAX_AGENT_ATTACHMENTS);
+
 	static LLCachedControl<bool> const freeze_time("FreezeTime", false);
 	mFreezeTimeLangolier = freeze_time;
 
@@ -1113,7 +1116,7 @@ LLVOAvatar::~LLVOAvatar()
 	lldebugs << "LLVOAvatar Destructor (0x" << this << ") id:" << mID << llendl;
 
 	std::for_each(mAttachmentPoints.begin(), mAttachmentPoints.end(), DeletePairedPointer());
-	mAttachmentPoints.clear();
+	//mAttachmentPoints.clear();
 	
 	mDead = TRUE;
 	
@@ -1523,7 +1526,7 @@ void LLVOAvatar::initInstance(void)
 
 	//VTPause();  // VTune
 	
-	mVoiceVisualizer->setVoiceEnabled( gVoiceClient->getVoiceEnabled( mID ) );
+	mVoiceVisualizer->setVoiceEnabled( LLVoiceClient::getInstance()->getVoiceEnabled( mID ) );
 }
 
 // virtual
@@ -1643,7 +1646,7 @@ void LLVOAvatar::getSpatialExtents(LLVector4a& newMin, LLVector4a& newMax)
 	mPixelArea = LLPipeline::calcPixelArea(center, size, *LLViewerCamera::getInstance());
 
 	//stretch bounding box by attachments
-	for (attachment_map_t::iterator iter = mAttachmentPoints.begin();
+	/*for (attachment_map_t::iterator iter = mAttachmentPoints.begin();
 		iter != mAttachmentPoints.end();
 		++iter)
 	{
@@ -1658,7 +1661,13 @@ void LLVOAvatar::getSpatialExtents(LLVector4a& newMin, LLVector4a& newMax)
 			 attachment_iter != attachment->mAttachedObjects.end();
 			 ++attachment_iter)
 		{
-			const LLViewerObject* attached_object = (*attachment_iter);
+			const LLViewerObject* attached_object = (*attachment_iter);*/
+	std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator attachment_iter = mAttachedObjectsVector.begin();
+	for(;attachment_iter!=mAttachedObjectsVector.end();++attachment_iter)
+	{
+		if(attachment_iter->second->getValid())
+		{
+			const LLViewerObject* attached_object = attachment_iter->first;
 			if (attached_object && !attached_object->isHUDAttachment())
 			{
 				LLDrawable* drawable = attached_object->mDrawable;
@@ -2335,12 +2344,15 @@ void LLVOAvatar::idleUpdate(LLAgent &agent, LLWorld &world, const F64 &time)
 	// store off last frame's root position to be consistent with camera position
 	LLVector3 root_pos_last = mRoot->getWorldPosition();
 	bool detailed_update = updateCharacter(agent);
-	bool voice_enabled = gVoiceClient->getVoiceEnabled( mID ) && gVoiceClient->inProximalChannel();
 
 	if (gNoRender)
 	{
 		return;
 	}
+
+	static LLUICachedControl<bool> visualizers_in_calls("ShowVoiceVisualizersInCalls", false);
+	bool voice_enabled = (visualizers_in_calls || LLVoiceClient::getInstance()->inProximalChannel()) &&
+						 LLVoiceClient::getInstance()->getVoiceEnabled(mID);
 
 	idleUpdateVoiceVisualizer( voice_enabled );
 	idleUpdateMisc( detailed_update );
@@ -2361,10 +2373,10 @@ void LLVOAvatar::idleUpdateVoiceVisualizer(bool voice_enabled)
 {
 	bool render_visualizer = voice_enabled;
 	
-	// Don't render the user's own voice visualizer when in mouselook
+	// Don't render the user's own voice visualizer when in mouselook, or when opening the mic is disabled.
 	if(isSelf())
 	{
-		if(gAgentCamera.cameraMouselook()/* || gSavedSettings.getBOOL("VoiceDisableMic")*/)
+		if(gAgentCamera.cameraMouselook() || gSavedSettings.getBOOL("VoiceDisableMic"))
 		{
 			render_visualizer = false;
 		}
@@ -2412,7 +2424,7 @@ void LLVOAvatar::idleUpdateVoiceVisualizer(bool voice_enabled)
 		// Notice the calls to "gAwayTimer.reset()". This resets the timer that determines how long the avatar has been
 		// "away", so that the avatar doesn't lapse into away-mode (and slump over) while the user is still talking. 
 		//-----------------------------------------------------------------------------------------------------------------
-		if ( gVoiceClient->getIsSpeaking( mID ) )
+		if (LLVoiceClient::getInstance()->getIsSpeaking( mID ))
 		{
 			if ( ! mVoiceVisualizer->getCurrentlySpeaking() )
 			{
@@ -2421,7 +2433,7 @@ void LLVOAvatar::idleUpdateVoiceVisualizer(bool voice_enabled)
 				//printf( "gAwayTimer.reset();\n" );
 			}
 			
-			mVoiceVisualizer->setSpeakingAmplitude( gVoiceClient->getCurrentPower( mID ) );
+			mVoiceVisualizer->setSpeakingAmplitude( LLVoiceClient::getInstance()->getCurrentPower( mID ) );
 			
 			if( isSelf() )
 			{
@@ -2485,7 +2497,7 @@ void LLVOAvatar::idleUpdateMisc(bool detailed_update)
 	if (detailed_update || !sUseImpostors)
 	{
 		LLFastTimer t(FTM_ATTACHMENT_UPDATE);
-		for (attachment_map_t::iterator iter = mAttachmentPoints.begin(); 
+		/*for (attachment_map_t::iterator iter = mAttachmentPoints.begin(); 
 			 iter != mAttachmentPoints.end();
 			 ++iter)
 		{
@@ -2495,7 +2507,12 @@ void LLVOAvatar::idleUpdateMisc(bool detailed_update)
 				 attachment_iter != attachment->mAttachedObjects.end();
 				 ++attachment_iter)
 			{
-				LLViewerObject* attached_object = (*attachment_iter);
+				LLViewerObject* attached_object = (*attachment_iter);*/
+		std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator attachment_iter = mAttachedObjectsVector.begin();
+		for(;attachment_iter!=mAttachedObjectsVector.end();++attachment_iter)
+		{{
+				LLViewerJointAttachment* attachment = attachment_iter->second;
+				LLViewerObject* attached_object = attachment_iter->first;
 				BOOL visibleAttachment = visible || (attached_object && 
 													!(attached_object->mDrawable->getSpatialBridge() &&
 													  attached_object->mDrawable->getSpatialBridge()->getRadius() < 2.0));
@@ -2668,7 +2685,7 @@ F32 LLVOAvatar::calcMorphAmount()
 void LLVOAvatar::idleUpdateLipSync(bool voice_enabled)
 {
 	// Use the Lipsync_Ooh and Lipsync_Aah morphs for lip sync
-	if ( voice_enabled && (gVoiceClient->lipSyncEnabled()) && gVoiceClient->getIsSpeaking( mID ) )
+	if ( voice_enabled && (LLVoiceClient::getInstance()->lipSyncEnabled()) && LLVoiceClient::getInstance()->getIsSpeaking( mID ) )
 	{
 		F32 ooh_morph_amount = 0.0f;
 		F32 aah_morph_amount = 0.0f;
@@ -2963,7 +2980,7 @@ void LLVOAvatar::idleCCSUpdateAttachmentText(bool render_name)
 		if(!mCCSUpdateAttachmentTimer.checkExpirationAndReset(SECS_BETWEEN_UPDATES))
 			return;
 
-		for (attachment_map_t::iterator it=mAttachmentPoints.begin(); it!=mAttachmentPoints.end(); ++it)
+		/*for (attachment_map_t::iterator it=mAttachmentPoints.begin(); it!=mAttachmentPoints.end(); ++it)
 		{
 			// get attached object
 			LLViewerJointAttachment *joint = it->second;
@@ -2972,8 +2989,14 @@ void LLVOAvatar::idleCCSUpdateAttachmentText(bool render_name)
 			for(std::vector<LLViewerObject *>::const_iterator parent_it = joint->mAttachedObjects.begin();
 				parent_it != joint->mAttachedObjects.end(); ++parent_it) 
 			{
-				LLViewerObject* pObject = (*parent_it);
-				const LLTextureEntry *te = pObject ? pObject->getTE(0) : NULL;
+				LLViewerObject* pObject = (*parent_it);*/
+		std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator parent_it = mAttachedObjectsVector.begin();
+		for(;parent_it!=mAttachedObjectsVector.end();++parent_it)
+		{{
+				LLViewerObject* pObject = parent_it->first;
+				if(!pObject)
+					continue;
+				const LLTextureEntry *te = pObject->getTE(0);
 				if(!te)	continue;
 				const LLColor4 &col = te->getColor();
 				if(	(fabs(col[0] - 0.012f) < 0.001f) &&
@@ -3142,6 +3165,23 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 			//	LLFontGL::getFontSansSerifSmall());
 		}
 
+		// On SecondLife we can take a shortcut through getPNSName, which will strip out Resident
+		if (gHippoGridManager->getConnectedGrid()->isSecondLife())
+		{
+			if (!LLAvatarNameCache::getPNSName(getID(), firstnameText))
+			{
+				// ...call this function back when the name arrives and force a rebuild
+				LLAvatarNameCache::get(getID(), boost::bind(&LLVOAvatar::clearNameTag, this));
+			}
+// [RLVa:KB] - Checked: 2010-10-31 (RLVa-1.2.2a) | Modified: RLVa-1.2.2a
+			else if (fRlvShowNames && !isSelf())
+			{
+				firstnameText = RlvStrings::getAnonym(firstnameText);
+			}
+// [/RLVa:KB]
+		}
+		else
+		{
 	//	static LLUICachedControl<bool> show_display_names("NameTagShowDisplayNames");
 	//	static LLUICachedControl<bool> show_usernames("NameTagShowUsernames");
 
@@ -3214,6 +3254,7 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 // [/RLVa:KB]
 
 		}
+		}
 		
 		static const LLCachedControl<bool> allow_nameplate_override ("CCSAllowNameplateOverride", true);
 		std::string client_name = SHClientTagMgr::instance().getClientName(this, is_friend);
@@ -3228,7 +3269,7 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 		else if(allow_nameplate_override && !mCCSAttachmentText.empty())
 			tag_format=mCCSAttachmentText;
 		else
-			tag_format=sRenderGroupTitles ? "%g\n%f %l %t" : "%f\n%l %t";
+			tag_format=sRenderGroupTitles ? "%g\n%f %l %t" : "%f %l %t";
 
 		// replace first name, last name and title
 		typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
@@ -3246,21 +3287,18 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 				addNameTagLine(client_name, name_tag_color, LLFontGL::NORMAL, LLFontGL::getFontSansSerifSmall());
 			else
 			{
-				std::string::size_type index;
-				while ((index = line.find("%f")) != std::string::npos)
-					line.replace(index, 2, firstnameText);
-				while ((index = line.find("%l")) != std::string::npos)
+				boost::algorithm::replace_all(line, "%f", firstnameText);
+				if (lastnameText.empty()) //Entire displayname string crammed into firstname so eat the extra space.
 				{
-					//llinfos << "'" <<  line.substr(index) << "'" <<  llendl;
-					if(lastnameText.empty() && line[index+2] == ' ')	//Entire displayname string crammed into firstname
-						line.replace(index, 3, "");						//so eat the extra space.
-					else
-						line.replace(index, 2, lastnameText);
+					boost::algorithm::replace_all(line, " %l", "");
+					boost::algorithm::replace_all(line, "%l", "");
 				}
-				while ((index = line.find("%g")) != std::string::npos)
-					line.replace(index, 2, groupText);
-				while ((index = line.find("%t")) != std::string::npos)
-					line.replace(index, 2, client_name);
+				else
+				{
+					boost::algorithm::replace_all(line, "%l", lastnameText);
+				}
+				boost::algorithm::replace_all(line, "%g", groupText);
+				boost::algorithm::replace_all(line, "%t", client_name);
 				LLStringUtil::trim(line);
 				if(!line.empty())
 					addNameTagLine(line, name_tag_color, LLFontGL::NORMAL, LLFontGL::getFontSansSerif());
@@ -3288,7 +3326,7 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 		std::deque<LLChat>::iterator chat_iter = mChats.begin();
 		mNameText->clearString();
 
-		LLColor4 new_chat = gColors.getColor( "AvatarNameColor" );
+		LLColor4 new_chat = getNameTagColor(is_friend);
 		if (mVisibleChat)
 		{
 		LLColor4 normal_chat = lerp(new_chat, LLColor4(0.8f, 0.8f, 0.8f, 1.f), 0.7f);
@@ -3302,6 +3340,13 @@ void LLVOAvatar::idleUpdateNameTagText(BOOL new_name)
 		{
 			F32 chat_fade_amt = llclamp((F32)((LLFrameTimer::getElapsedSeconds() - chat_iter->mTime) / CHAT_FADE_TIME), 0.f, 4.f);
 			LLFontGL::StyleFlags style;
+
+			// Singu Note: The following tweak may be a bad idea, though they've asked for actions to be italicized, the chat type for actions becomes irrelevant
+			// If LLFontGL::StyleFlags wasn't the parameter type, font styles could be combined and underline could be used, but that may be unnatural...
+			static const LLCachedControl<bool> italicize("LiruItalicizeActions");
+			if (italicize && chat_iter->mChatStyle == CHAT_STYLE_IRC)
+				style = LLFontGL::ITALIC;
+			else
 			switch(chat_iter->mChatType)
 			{
 			case CHAT_TYPE_WHISPER:
@@ -6176,6 +6221,8 @@ const LLViewerJointAttachment *LLVOAvatar::attachObject(LLViewerObject *viewer_o
 		LLSelectMgr::getInstance()->updatePointAt();
 	}
 
+	mAttachedObjectsVector.push_back(std::make_pair(viewer_object,attachment));
+
 	return attachment;
 }
 
@@ -6330,6 +6377,13 @@ BOOL LLVOAvatar::detachObject(LLViewerObject *viewer_object)
 		{
 			cleanupAttachedMesh( viewer_object );
 			attachment->removeObject(viewer_object);
+			std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator it = std::find(mAttachedObjectsVector.begin(),mAttachedObjectsVector.end(),std::make_pair(viewer_object,attachment));
+			if(it != mAttachedObjectsVector.end())
+			{
+				(*it) = mAttachedObjectsVector.back();
+				mAttachedObjectsVector.pop_back();
+			}
+
 			lldebugs << "Detaching object " << viewer_object->mID << " from " << attachment->getName() << llendl;
 			return TRUE;
 		}
@@ -8636,7 +8690,7 @@ void LLVOAvatar::idleUpdateRenderCost()
 
 		std::set<LLUUID> textures;
 
-		attachment_map_t::const_iterator iter;
+		/*attachment_map_t::const_iterator iter;
 		for (iter = mAttachmentPoints.begin();
 				iter != mAttachmentPoints.end();
 				++iter)
@@ -8646,7 +8700,11 @@ void LLVOAvatar::idleUpdateRenderCost()
 					attachment_iter != attachment->mAttachedObjects.end();
 					++attachment_iter)
 			{
-				const LLViewerObject* object = (*attachment_iter);
+				const LLViewerObject* object = (*attachment_iter);*/
+		std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator attachment_iter = mAttachedObjectsVector.begin();
+		for(;attachment_iter!=mAttachedObjectsVector.end();++attachment_iter)
+		{{
+				const LLViewerObject* object = attachment_iter->first;
 				if (object && !object->isHUDAttachment())
 				{
 					LLDrawable* drawable = object->mDrawable;
@@ -8698,7 +8756,7 @@ void LLVOAvatar::idleUpdateRenderCost()
 		}
 
 
-		for (attachment_map_t::const_iterator iter = mAttachmentPoints.begin();
+		/*for (attachment_map_t::const_iterator iter = mAttachmentPoints.begin();
 				iter != mAttachmentPoints.end();
 				++iter)
 		{
@@ -8707,7 +8765,11 @@ void LLVOAvatar::idleUpdateRenderCost()
 					attachment_iter != attachment->mAttachedObjects.end();
 					++attachment_iter)
 			{
-				const LLViewerObject* attached_object = (*attachment_iter);
+				const LLViewerObject* attached_object = (*attachment_iter);*/
+		std::vector<std::pair<LLViewerObject*,LLViewerJointAttachment*> >::iterator attachment_iter = mAttachedObjectsVector.begin();
+		for(;attachment_iter!=mAttachedObjectsVector.end();++attachment_iter)
+		{{
+				const LLViewerObject* attached_object = attachment_iter->first;
 				if (attached_object && !attached_object->isHUDAttachment())
 				{
 					textures.clear();

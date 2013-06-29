@@ -399,8 +399,7 @@ BOOL LLPreviewGesture::postBuild()
 	LLCheckBoxCtrl* check;
 
 	edit = getChild<LLLineEditor>("trigger_editor");
-	edit->setKeystrokeCallback(onKeystrokeCommit);
-	edit->setCallbackUserData(this);
+	edit->setKeystrokeCallback(boost::bind(&onKeystrokeCommit,_1,this));
 	edit->setCommitCallback(boost::bind(&LLPreviewGesture::onCommitSetDirty,this));
 	edit->setCommitOnFocusLost(TRUE);
 	edit->setIgnoreTab(TRUE);
@@ -412,11 +411,9 @@ BOOL LLPreviewGesture::postBuild()
 
 	edit = getChild<LLLineEditor>("replace_editor");
 	edit->setEnabled(FALSE);
-	edit->setKeystrokeCallback(onKeystrokeCommit);
-	edit->setCallbackUserData(this);
+	edit->setKeystrokeCallback(boost::bind(&onKeystrokeCommit,_1,this));
 	edit->setCommitCallback(boost::bind(&LLPreviewGesture::onCommitSetDirty,this));
 	edit->setCommitOnFocusLost(TRUE);
-
 	edit->setIgnoreTab(TRUE);
 	mReplaceEditor = edit;
 
@@ -481,10 +478,8 @@ BOOL LLPreviewGesture::postBuild()
 	edit = getChild<LLLineEditor>("chat_editor");
 	edit->setVisible(FALSE);
 	edit->setCommitCallback(boost::bind(&LLPreviewGesture::onCommitChat,this));
-	//edit->setKeystrokeCallback(onKeystrokeCommit);
-	//edit->setCallbackUserData(this);
+	//edit->setKeystrokeCallback(onKeystrokeCommit, this);
 	edit->setCommitOnFocusLost(TRUE);
-	
 	edit->setIgnoreTab(TRUE);
 	mChatEditor = edit;
 
@@ -502,11 +497,9 @@ BOOL LLPreviewGesture::postBuild()
 	edit->setEnabled(FALSE);
 	edit->setVisible(FALSE);
 	edit->setPrevalidate(LLLineEditor::prevalidateFloat);
-//	edit->setKeystrokeCallback(onKeystrokeCommit);
-	//edit->setCallbackUserData(this);
+//	edit->setKeystrokeCallback(onKeystrokeCommit, this);
 	edit->setCommitOnFocusLost(TRUE);
 	edit->setCommitCallback(boost::bind(&LLPreviewGesture::onCommitWaitTime,this));
-	
 	edit->setIgnoreTab(TRUE);
 	mWaitTimeEditor = edit;
 
@@ -530,14 +523,13 @@ BOOL LLPreviewGesture::postBuild()
 	addAnimations();
 	addSounds();
 
-
 	const LLInventoryItem* item = getItem();
 
 	if (item) 
 	{
 		childSetCommitCallback("desc", LLPreview::onText, this);
 		childSetText("desc", item->getDescription());
-		childSetPrevalidate("desc", &LLLineEditor::prevalidatePrintableNotPipe);
+		getChild<LLLineEditor>("desc")->setPrevalidate(&LLLineEditor::prevalidatePrintableNotPipe);
 	}
 
 	return TRUE;

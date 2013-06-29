@@ -189,6 +189,8 @@ public:
 	static void assetCallback(LLVFS *vfs, const LLUUID &uuid, LLAssetType::EType type, void *user_data, S32 result_code, LLExtStat ext_status);
 
 	friend class LLPipeline; // For debugging
+
+	void checkStates();
 public:
 	F32 mMaxWindGain; // Hack.  Public to set before fade in?
 
@@ -447,7 +449,7 @@ public:
 protected:
 	virtual void play() = 0;
 	virtual void playSynced(LLAudioChannel *channelp) = 0;
-	virtual void cleanup() = 0;
+	virtual void cleanup();
 	void setWaiting(bool waiting)               { mWaiting = waiting; }
 
 public:
@@ -478,6 +480,7 @@ protected:
 class LLAudioBuffer
 {
 public:
+	LLAudioBuffer() : mInUse(true), mAudioDatap(NULL) { mLastUseTimer.reset(); }
 	virtual ~LLAudioBuffer() {};
 	virtual bool loadWAV(const std::string& filename) = 0;
 	virtual U32 getLength() = 0;

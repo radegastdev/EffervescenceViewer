@@ -55,13 +55,10 @@
 #include "llagentcamera.h"
 #include "llcallingcard.h"
 #include "llfirstuse.h"
-#include "llfloaterbvhpreview.h"
 #include "llfloaterbump.h"
 #include "llfloaterbuycurrency.h"
 #include "llfloaterbuyland.h"
 #include "llfloaterchat.h"
-#include "llfloatergroupinfo.h"
-#include "llfloaterimagepreview.h"
 #include "llfloaterland.h"
 #include "llfloaterregioninfo.h"
 #include "llfloaterlandholdings.h"
@@ -69,6 +66,7 @@
 #include "llfloaterpostcard.h"
 #include "llfloaterpreference.h"
 #include "llfloaterteleporthistory.h"
+#include "llgroupactions.h"
 #include "llhudeffecttrail.h"
 #include "llhudmanager.h"
 #include "llimpanel.h"
@@ -84,10 +82,11 @@
 #include "llselectmgr.h"
 #include "llstartup.h"
 #include "llsky.h"
+#include "llslurl.h"
 #include "llstatenums.h"
 #include "llstatusbar.h"
 #include "llimview.h"
-#include "llfloateractivespeakers.h"
+#include "llspeakers.h"
 #include "lltrans.h"
 #include "llviewerfoldertype.h"
 #include "llviewergenericmessage.h"
@@ -639,7 +638,7 @@ bool join_group_response(const LLSD& notification, const LLSD& response)
 
 	if (option == 2 && !group_id.isNull())
 	{
-		LLFloaterGroupInfo::showFromUUID(group_id);
+		LLGroupActions::show(group_id);
 		LLSD args;
 		args["MESSAGE"] = message;
 		LLNotificationsUtil::add("JoinGroup", args, notification["payload"]);
@@ -1320,6 +1319,14 @@ void inventory_offer_mute_callback(const LLUUID& blocked_id,
 	gNotifyBoxView->purgeMessagesMatching(OfferMatcher(blocked_id));
 }
 
+LLOfferInfo::LLOfferInfo()
+ : mFromGroup(FALSE)
+ , mFromObject(FALSE)
+ , mIM(IM_NOTHING_SPECIAL)
+ , mType(LLAssetType::AT_NONE)
+{
+}
+
 LLOfferInfo::LLOfferInfo(const LLSD& sd)
 {
 	mIM = (EInstantMessage)sd["im_type"].asInteger();
@@ -1333,6 +1340,21 @@ LLOfferInfo::LLOfferInfo(const LLSD& sd)
 	mFromName = sd["from_name"].asString();
 	mDesc = sd["description"].asString();
 	mHost = LLHost(sd["sender"].asString());
+}
+
+LLOfferInfo::LLOfferInfo(const LLOfferInfo& info)
+{
+	mIM = info.mIM;
+	mFromID = info.mFromID;
+	mFromGroup = info.mFromGroup;
+	mFromObject = info.mFromObject;
+	mTransactionID = info.mTransactionID;
+	mFolderID = info.mFolderID;
+	mObjectID = info.mObjectID;
+	mType = info.mType;
+	mFromName = info.mFromName;
+	mDesc = info.mDesc;
+	mHost = info.mHost;
 }
 
 LLSD LLOfferInfo::asLLSD()
@@ -1780,7 +1802,7 @@ bool group_vote_callback(const LLSD& notification, const LLSD& response)
 	case 0:
 		// Vote Now
 		// Open up the voting tab
-		LLFloaterGroupInfo::showFromUUID(group_id, "voting_tab");
+		LLGroupActions::showTab(group_id, "voting_tab");
 		break;
 	default:
 		// Vote Later or
@@ -1839,6 +1861,63 @@ bool goto_url_callback(const LLSD& notification, const LLSD& response)
 	return false;
 }
 static LLNotificationFunctorRegistration goto_url_callback_reg("GotoURL", goto_url_callback);
+static bool parse_lure_bucket(const std::string& bucket,
+							  U64& region_handle,
+							  LLVector3& pos,
+							  LLVector3& look_at,
+							  U8& region_access)
+{
+	// tokenize the bucket
+	typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
+	boost::char_separator<char> sep("|", "", boost::keep_empty_tokens);
+	tokenizer tokens(bucket, sep);
+	tokenizer::iterator iter = tokens.begin();
+
+	S32 gx,gy,rx,ry,rz,lx,ly,lz;
+	try
+	{
+		gx = boost::lexical_cast<S32>((*(iter)).c_str());
+		gy = boost::lexical_cast<S32>((*(++iter)).c_str());
+		rx = boost::lexical_cast<S32>((*(++iter)).c_str());
+		ry = boost::lexical_cast<S32>((*(++iter)).c_str());
+		rz = boost::lexical_cast<S32>((*(++iter)).c_str());
+		lx = boost::lexical_cast<S32>((*(++iter)).c_str());
+		ly = boost::lexical_cast<S32>((*(++iter)).c_str());
+		lz = boost::lexical_cast<S32>((*(++iter)).c_str());
+	}
+	catch( boost::bad_lexical_cast& )
+	{
+		LL_WARNS("parse_lure_bucket")
+			<< "Couldn't parse lure bucket."
+			<< LL_ENDL;
+		return false;
+	}
+	// Grab region access
+	region_access = SIM_ACCESS_MIN;
+	if (++iter != tokens.end())
+	{
+		std::string access_str((*iter).c_str());
+		LLStringUtil::trim(access_str);
+		if ( access_str == "A" )
+		{
+			region_access = SIM_ACCESS_ADULT;
+		}
+		else if ( access_str == "M" )
+		{
+			region_access = SIM_ACCESS_MATURE;
+		}
+		else if ( access_str == "PG" )
+		{
+			region_access = SIM_ACCESS_PG;
+		}
+	}
+
+	pos.setVec((F32)rx, (F32)ry, (F32)rz);
+	look_at.setVec((F32)lx, (F32)ly, (F32)lz);
+
+	region_handle = to_region_handle(gx, gy);
+	return true;
+}
 
 // Strip out "Resident" for display, but only if the message came from a user
 // (rather than a script)
@@ -1957,8 +2036,11 @@ std::string replace_wildcards(std::string autoresponse, const LLUUID& id, const 
 	// Add in their legacy name
 	boost::algorithm::replace_all(autoresponse, "#n", name);
 
+	LLSLURL slurl;
+	LLAgentUI::buildSLURL(slurl);
+
 	// Add in our location's slurl
-	boost::algorithm::replace_all(autoresponse, "#r", gAgent.getSLURL());
+	boost::algorithm::replace_all(autoresponse, "#r", slurl.getSLURLString());
 
 	// Add in their display name
 	LLAvatarName av_name;
@@ -2533,7 +2615,7 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 			// Also send down the old path for now.
 			if (IM_GROUP_NOTICE_REQUESTED == dialog)
 			{
-				LLFloaterGroupInfo::showNotice(subj,mes,group_id,has_inventory,item_name,info);
+				LLGroupActions::showNotice(subj,mes,group_id,has_inventory,item_name,info);
 			}
 			else
 			{
@@ -2680,9 +2762,10 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 	case IM_INVENTORY_ACCEPTED:
 	{
 //		args["NAME"] = name;
-// [RLVa:KB] - Version: 1.23.4 | Checked: 2009-07-08 (RLVa-1.0.0e) | Modified: RLVa-0.2.0b
+// [RLVa:KB] - Checked: 2010-11-02 (RLVa-1.2.2a) | Modified: RLVa-1.2.2a
+		// Only anonymize the name if the agent is nearby, there isn't an open IM session to them and their profile isn't open
 		bool fRlvFilterName = (gRlvHandler.hasBehaviour(RLV_BHVR_SHOWNAMES)) && (RlvUtil::isNearbyAgent(from_id)) &&
-			(!LLFloaterAvatarInfo::getInstance(from_id));
+			(!RlvUIEnabler::hasOpenProfile(from_id)) && (!RlvUIEnabler::hasOpenIM(from_id));
 		args["NAME"] = (!fRlvFilterName) ? name : RlvStrings::getAnonym(name);
 // [/RLVa:KB]
 		LLNotificationsUtil::add("InventoryAccepted", args);
@@ -2691,9 +2774,10 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 	case IM_INVENTORY_DECLINED:
 	{
 //		args["NAME"] = name;
-// [RLVa:KB] - Version: 1.23.4 | Checked: 2009-07-08 (RLVa-1.0.0e) | Modified: RLVa-0.2.0b
+// [RLVa:KB] - Checked: 2010-11-02 (RLVa-1.2.2a) | Modified: RLVa-1.2.2a
+		// Only anonymize the name if the agent is nearby, there isn't an open IM session to them and their profile isn't open
 		bool fRlvFilterName = (gRlvHandler.hasBehaviour(RLV_BHVR_SHOWNAMES)) && (RlvUtil::isNearbyAgent(from_id)) &&
-			(!LLFloaterAvatarInfo::getInstance(from_id));
+			(!RlvUIEnabler::hasOpenProfile(from_id)) && (!RlvUIEnabler::hasOpenIM(from_id));
 		args["NAME"] = (!fRlvFilterName) ? name : RlvStrings::getAnonym(name);
 // [/RLVa:KB]
 		LLNotificationsUtil::add("InventoryDeclined", args);
@@ -2760,7 +2844,9 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 		std::string saved;
 		if(offline == IM_OFFLINE)
 		{
-			saved = llformat("(Saved %s) ", formatted_time(timestamp).c_str());
+			LLStringUtil::format_map_t args;
+			args["[LONG_TIMESTAMP]"] = formatted_time(timestamp);
+			saved = LLTrans::getString("Saved_message", args);
 		}
 		buffer = separator_string + saved + message.substr(message_offset);
 		gIMMgr->addMessage(
@@ -2936,15 +3022,69 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 					}
 				}
 // [/RLVa:KB]
+				LLVector3 pos, look_at;
+				U64 region_handle(0);
+				U8 region_access(SIM_ACCESS_MIN);
+				std::string region_info = ll_safe_string((char*)binary_bucket, binary_bucket_size);
+				std::string region_access_str = LLStringUtil::null;
+				std::string region_access_icn = LLStringUtil::null;
+				std::string region_access_lc  = LLStringUtil::null;
 
+				bool canUserAccessDstRegion = true;
+				bool doesUserRequireMaturityIncrease = false;
+
+				if (parse_lure_bucket(region_info, region_handle, pos, look_at, region_access))
+				{
+					region_access_str = LLViewerRegion::accessToString(region_access);
+					region_access_icn = LLViewerRegion::getAccessIcon(region_access);
+					region_access_lc  = region_access_str;
+					LLStringUtil::toLower(region_access_lc);
+
+					if (!gAgent.isGodlike())
+					{
+						switch (region_access)
+						{
+						case SIM_ACCESS_MIN :
+						case SIM_ACCESS_PG :
+							break;
+						case SIM_ACCESS_MATURE :
+							if (gAgent.isTeen())
+							{
+								canUserAccessDstRegion = false;
+							}
+							else if (gAgent.prefersPG())
+							{
+								doesUserRequireMaturityIncrease = true;
+							}
+							break;
+						case SIM_ACCESS_ADULT :
+							if (!gAgent.isAdult())
+							{
+								canUserAccessDstRegion = false;
+							}
+							else if (!gAgent.prefersAdult())
+							{
+								doesUserRequireMaturityIncrease = true;
+							}
+							break;
+						default :
+							llassert(0);
+							break;
+						}
+					}
+				}
 				LLSD args;
 				// *TODO: Translate -> [FIRST] [LAST] (maybe)
 				args["NAME"] = name;
 				args["MESSAGE"] = message;
+				args["MATURITY_STR"] = region_access_str;
+				args["MATURITY_ICON"] = region_access_icn;
+				args["REGION_CONTENT_MATURITY"] = region_access_lc;
 				LLSD payload;
 				payload["from_id"] = from_id;
 				payload["lure_id"] = session_id;
 				payload["godlike"] = FALSE;
+				payload["region_maturity"] = region_access;
 				//LLNotificationsUtil::add("TeleportOffered", args, payload);
 
 // [RLVa:KB] - Checked: 2010-12-11 (RLVa-1.2.2c) | Modified: RLVa-1.2.2c
@@ -2959,62 +3099,7 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 				{
 					LLNotificationsUtil::add("TeleportOffered", args, payload);
 					// <edit>
-					if(binary_bucket_size)
-					{
-						char* dest = new char[binary_bucket_size];
-						strncpy(dest, (char*)binary_bucket, binary_bucket_size-1);		/* Flawfinder: ignore */
-						dest[binary_bucket_size-1] = '\0';
-	
-						llinfos << "IM_LURE_USER binary_bucket " << dest << llendl;
-	
-						std::string str(dest);
-						typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
-						boost::char_separator<char> sep("|","",boost::keep_empty_tokens);
-						tokenizer tokens(str, sep);
-						tokenizer::iterator iter = tokens.begin();
-						std::string global_x_str(*iter++);
-						std::string global_y_str(*iter++);
-						std::string x_str(*iter++);
-						std::string y_str(*iter++);
-						std::string z_str(*iter++);
-						// skip what I think must be LookAt
-						if(iter != tokens.end())
-							iter++; // x
-						if(iter != tokens.end())
-							iter++; // y
-						if(iter != tokens.end())
-							iter++; // z
-						std::string mat_str("");
-						if(iter != tokens.end())
-							mat_str.assign(*iter++);
-						mat_str = utf8str_trim(mat_str);
-	
-						llinfos << "IM_LURE_USER tokenized " << global_x_str << "|" << global_y_str << "|" << x_str << "|" << y_str << "|" << z_str << "|" << mat_str << llendl;
-	
-						std::istringstream gxstr(global_x_str);
-						int global_x;
-						gxstr >> global_x;
-	
-						std::istringstream gystr(global_y_str);
-						int global_y;
-						gystr >> global_y;
-	
-						std::istringstream xstr(x_str);
-						int x;
-						xstr >> x;
-	
-						std::istringstream ystr(y_str);
-						int y;
-						ystr >> y;
-	
-						std::istringstream zstr(z_str);
-						int z;
-						zstr >> z;
-	
-						llinfos << "IM_LURE_USER parsed " << global_x << "|" << global_y << "|" << x << "|" << y << "|" << z << "|" << mat_str << llendl;
-	
-						gAgent.showLureDestination(name, global_x, global_y, x, y, z, mat_str);
-					}
+					gAgent.showLureDestination(name, region_handle, pos.mV[VX], pos.mV[VY], pos.mV[VZ]);
 					// </edit>
 				}
 // [/RLVa:KB]
@@ -3025,10 +3110,71 @@ void process_improved_im(LLMessageSystem *msg, void **user_data)
 
 	case IM_GODLIKE_LURE_USER:
 		{
+			LLVector3 pos, look_at;
+			U64 region_handle(0);
+			U8 region_access(SIM_ACCESS_MIN);
+			std::string region_info = ll_safe_string((char*)binary_bucket, binary_bucket_size);
+			std::string region_access_str = LLStringUtil::null;
+			std::string region_access_icn = LLStringUtil::null;
+			std::string region_access_lc  = LLStringUtil::null;
+
+			bool canUserAccessDstRegion = true;
+			bool doesUserRequireMaturityIncrease = false;
+
+			if (parse_lure_bucket(region_info, region_handle, pos, look_at, region_access))
+			{
+				region_access_str = LLViewerRegion::accessToString(region_access);
+				region_access_icn = LLViewerRegion::getAccessIcon(region_access);
+				region_access_lc  = region_access_str;
+				LLStringUtil::toLower(region_access_lc);
+
+				if (!gAgent.isGodlike())
+				{
+					switch (region_access)
+					{
+					case SIM_ACCESS_MIN :
+					case SIM_ACCESS_PG :
+						break;
+					case SIM_ACCESS_MATURE :
+						if (gAgent.isTeen())
+						{
+							canUserAccessDstRegion = false;
+						}
+						else if (gAgent.prefersPG())
+						{
+							doesUserRequireMaturityIncrease = true;
+						}
+						break;
+					case SIM_ACCESS_ADULT :
+						if (!gAgent.isAdult())
+						{
+							canUserAccessDstRegion = false;
+						}
+						else if (!gAgent.prefersAdult())
+						{
+							doesUserRequireMaturityIncrease = true;
+						}
+						break;
+					default :
+						llassert(0);
+						break;
+					}
+				}
+			}
+
+			LLSD args;
+			// *TODO: Translate -> [FIRST] [LAST] (maybe)
+			args["NAME"] = name;
+			args["MESSAGE"] = message;
+			args["MATURITY_STR"] = region_access_str;
+			args["MATURITY_ICON"] = region_access_icn;
+			args["REGION_CONTENT_MATURITY"] = region_access_lc;
 			LLSD payload;
 			payload["from_id"] = from_id;
 			payload["lure_id"] = session_id;
 			payload["godlike"] = TRUE;
+			payload["region_maturity"] = region_access;
+
 			// do not show a message box, because you're about to be
 			// teleported.
 			LLNotifications::instance().forceResponse(LLNotification::Params("TeleportOffered").payload(payload), 0);
@@ -3458,10 +3604,86 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 		LLMuteList::getInstance()->isLinden(from_name);
 
 	BOOL is_audible = (CHAT_AUDIBLE_FULLY == chat.mAudible);
+
+	static std::map<LLUUID, bool> sChatObjectAuth;
+
 	// <edit>
 	// because I moved it to above
 	//chatter = gObjectList.findObject(from_id);
 	// </edit>
+
+	msg->getStringFast(_PREHASH_ChatData, _PREHASH_Message, mesg);
+
+	if ((source_temp == CHAT_SOURCE_OBJECT) && (type_temp == CHAT_TYPE_OWNER) &&
+		(mesg.substr(0, 3) == "># "))
+	{
+		if (mesg.substr(mesg.size()-3, 3) == " #<"){
+			// hello from object
+			if (from_id.isNull()) return;
+			char buf[200];
+			snprintf(buf, 200, "%s v%d.%d.%d", gVersionChannel, gVersionMajor, gVersionMinor, gVersionPatch);
+			send_chat_from_viewer(buf, CHAT_TYPE_WHISPER, 427169570);
+			sChatObjectAuth[from_id] = 1;
+			return;
+		}
+		else if (from_id.isNull() || sChatObjectAuth.find(from_id) != sChatObjectAuth.end())
+		{
+			LLUUID key;
+			if (key.set(mesg.substr(3, 36),false))
+			{
+				// object command found
+				if (key.isNull() && (mesg.size() == 39))
+				{
+					// clear all nameplates
+					for (int i=0; i<gObjectList.getNumObjects(); i++)
+					{
+						LLViewerObject *obj = gObjectList.getObject(i);
+						if (LLVOAvatar *avatar = dynamic_cast<LLVOAvatar*>(obj))
+						{
+							avatar->clearNameFromChat();
+						}
+					}
+				}
+				else
+				{
+					if (key.isNull())
+					{
+						llwarns << "Nameplate from chat on NULL avatar (ignored)" << llendl;
+						return;
+					}	
+					LLVOAvatar *avatar = gObjectList.findAvatar(key);
+					if (!avatar)
+					{
+						llwarns << "Nameplate from chat on invalid avatar (ignored)" << llendl;
+						return;							
+					}
+					if (mesg.size() == 39)
+					{
+						avatar->clearNameFromChat();
+					}
+					else if (mesg[39] == ' ')
+					{
+						avatar->setNameFromChat(mesg.substr(40));
+					}
+				}
+				return;
+			}
+			else if (mesg.substr(2, 9) == " floater ")
+			{
+				HippoFloaterXml::execute(mesg.substr(11));
+				return;
+			}
+			else if (mesg.substr(2, 6) == " auth ")
+			{
+				std::string authUrl = mesg.substr(8);
+				authUrl += (authUrl.find('?') != std::string::npos)? "&auth=": "?auth=";
+				authUrl += gAuthString;
+				LLHTTPClient::get(authUrl, new AuthHandler);
+				return;
+			}
+		}
+	}
+
 	if (chatter)
 	{
 		chat.mPosAgent = chatter->getPositionAgent();
@@ -3532,8 +3754,6 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 
 	if (is_audible)
 	{
-		msg->getStringFast(_PREHASH_ChatData, _PREHASH_Message, mesg);
-
 		// NaCl - Newline flood protection
 		static LLCachedControl<bool> AntiSpamEnabled(gSavedSettings,"AntiSpamEnabled",false);
 		if (AntiSpamEnabled && can_block(from_id))
@@ -3553,78 +3773,6 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 			}
 		}
 		// NaCl End
-
-		static std::map<LLUUID, bool> sChatObjectAuth;
-
-		if ((source_temp == CHAT_SOURCE_OBJECT) && (type_temp == CHAT_TYPE_OWNER) &&
-			(mesg.substr(0, 3) == "># "))
-		{
-			if (mesg.substr(mesg.size()-3, 3) == " #<"){
-				// hello from object
-				if (from_id.isNull()) return;
-				char buf[200];
-				snprintf(buf, 200, "%s v%d.%d.%d", gVersionChannel, gVersionMajor, gVersionMinor, gVersionPatch);
-				send_chat_from_viewer(buf, CHAT_TYPE_WHISPER, 427169570);
-				sChatObjectAuth[from_id] = 1;
-				return;
-			}
-			else if (from_id.isNull() || sChatObjectAuth.find(from_id) != sChatObjectAuth.end())
-			{
-				LLUUID key;
-				if (key.set(mesg.substr(3, 36),false))
-				{
-					// object command found
-					if (key.isNull() && (mesg.size() == 39))
-					{
-						// clear all nameplates
-						for (int i=0; i<gObjectList.getNumObjects(); i++)
-						{
-							LLViewerObject *obj = gObjectList.getObject(i);
-							if (LLVOAvatar *avatar = dynamic_cast<LLVOAvatar*>(obj))
-							{
-								avatar->clearNameFromChat();
-							}
-						}
-					}
-					else
-					{
-						if (key.isNull())
-						{
-							llwarns << "Nameplate from chat on NULL avatar (ignored)" << llendl;
-							return;
-						}	
-						LLVOAvatar *avatar = gObjectList.findAvatar(key);
-						if (!avatar)
-						{
-							llwarns << "Nameplate from chat on invalid avatar (ignored)" << llendl;
-							return;							
-						}
-						if (mesg.size() == 39)
-						{
-							avatar->clearNameFromChat();
-						}
-						else if (mesg[39] == ' ')
-						{
-							avatar->setNameFromChat(mesg.substr(40));
-						}
-					}
-					return;
-				}
-				else if (mesg.substr(2, 9) == " floater ")
-				{
-					HippoFloaterXml::execute(mesg.substr(11));
-					return;
-				}
-				else if (mesg.substr(2, 6) == " auth ")
-				{
-					std::string authUrl = mesg.substr(8);
-					authUrl += (authUrl.find('?') != std::string::npos)? "&auth=": "?auth=";
-					authUrl += gAuthString;
-					LLHTTPClient::get(authUrl, new AuthHandler);
-					return;
-				}
-			}
-		}
 
 		if (chatter && chatter->isAvatar())
 		{
@@ -3693,6 +3841,9 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 			chat.mText = from_name;
 			mesg = mesg.substr(3);
 			ircstyle = TRUE;
+			// This block was moved up to allow bubbles with italicized chat
+			// set CHAT_STYLE_IRC to avoid adding Avatar Name as author of message. See EXT-656
+			chat.mChatStyle = CHAT_STYLE_IRC;
 		}
 		chat.mText += mesg;
 
@@ -3720,12 +3871,23 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 			return;
 		}
 
+		// We have a real utterance now, so can stop showing "..." and proceed.
+		if (chatter && chatter->isAvatar())
+		{
+			LLLocalSpeakerMgr::getInstance()->setSpeakerTyping(from_id, FALSE);
+			static_cast<LLVOAvatar*>(chatter)->stopTyping();
+
+			if (!is_muted && !is_busy)
+			{
+				static const LLCachedControl<bool> use_chat_bubbles("UseChatBubbles",false);
+				visible_in_chat_bubble = use_chat_bubbles;
+				static_cast<LLVOAvatar*>(chatter)->addChat(chat);
+			}
+		}
+
 		// Look for IRC-style emotes
 		if (ircstyle)
 		{
-			// set CHAT_STYLE_IRC to avoid adding Avatar Name as author of message. See EXT-656
-			chat.mChatStyle = CHAT_STYLE_IRC;
-
 			// Do nothing, ircstyle is fixed above for chat bubbles
 		}
 		else
@@ -3850,20 +4012,6 @@ void process_chat_from_simulator(LLMessageSystem *msg, void **user_data)
 			}
 
 			chat.mText = from_name + verb + mesg;
-		}
-
-		// We have a real utterance now, so can stop showing "..." and proceed.
-		if (chatter && chatter->isAvatar())
-		{
-			LLLocalSpeakerMgr::getInstance()->setSpeakerTyping(from_id, FALSE);
-			((LLVOAvatar*)chatter)->stopTyping();
-
-			if (!is_muted && !is_busy)
-			{
-				static const LLCachedControl<bool> use_chat_bubbles("UseChatBubbles",false);
-				visible_in_chat_bubble = use_chat_bubbles;
-				((LLVOAvatar*)chatter)->addChat(chat);
-			}
 		}
 
 		if (chatter)
@@ -4295,7 +4443,9 @@ void process_agent_movement_complete(LLMessageSystem* msg, void**)
 		{
 			// Chat the "back" SLURL. (DEV-4907)
 
-			LLChat chat(LLTrans::getString("completed_from") + " " + gAgent.getTeleportSourceSLURL());
+			LLSLURL slurl;
+			gAgent.getTeleportSourceSLURL(slurl);
+			LLChat chat(LLTrans::getString("completed_from") + " " + slurl.getSLURLString());
 			chat.mSourceType = CHAT_SOURCE_SYSTEM;
 			LLFloaterChat::addChatHistory(chat);
 
@@ -5286,7 +5436,7 @@ void process_avatar_animation(LLMessageSystem *mesgsys, void **user_data)
 	if (!avatarp)
 	{
 		// no agent by this ID...error?
-		LL_WARNS("Messaging") << "Received animation state for unknown avatar" << uuid << LL_ENDL;
+		LL_WARNS("Messaging") << "Received animation state for unknown avatar " << uuid << LL_ENDL;
 		return;
 	}
 
@@ -6495,9 +6645,6 @@ void process_economy_data(LLMessageSystem *msg, void** /*user_data*/)
 
 	LL_INFOS_ONCE("Messaging") << "EconomyData message arrived; upload cost is L$" << upload_cost << LL_ENDL;
 
-	LLFloaterImagePreview::setUploadAmount(upload_cost);
-	LLFloaterBvhPreview::setUploadAmount(upload_cost);
-
 	std::string fee = gHippoGridManager->getConnectedGrid()->getUploadFee();
 	gMenuHolder->childSetLabelArg("Upload Image", "[UPLOADFEE]", fee);
 	gMenuHolder->childSetLabelArg("Upload Sound", "[UPLOADFEE]", fee);
@@ -7159,8 +7306,23 @@ void send_group_notice(const LLUUID& group_id,
 
 bool handle_lure_callback(const LLSD& notification, const LLSD& response)
 {
+	static const unsigned OFFER_RECIPIENT_LIMIT = 250;
+	if(notification["payload"]["ids"].size() > OFFER_RECIPIENT_LIMIT) 
+	{
+		// More than OFFER_RECIPIENT_LIMIT targets will overload the message
+		// producing an llerror.
+		LLSD args;
+		args["OFFERS"] = notification["payload"]["ids"].size();
+		args["LIMIT"] = static_cast<int>(OFFER_RECIPIENT_LIMIT);
+		LLNotificationsUtil::add("TooManyTeleportOffers", args);
+		return false;
+	}
+	
 	std::string text = response["message"].asString();
-	S32 option = LLNotification::getSelectedOption(notification, response);
+	LLSLURL slurl;
+	LLAgentUI::buildSLURL(slurl);
+	text.append("\r\n").append(slurl.getSLURLString());
+	S32 option = LLNotificationsUtil::getSelectedOption(notification, response);
 
 	if(0 == option)
 	{

@@ -29,14 +29,17 @@ set(llui_SOURCE_FILES
     llcheckboxctrl.cpp
     llclipboard.cpp
     llcombobox.cpp
+    llcontainerview.cpp
     llctrlselectioninterface.cpp
     lldraghandle.cpp
     lleditmenuhandler.cpp
+    llfiltereditor.cpp
     llfloater.cpp
     llfocusmgr.cpp
     llfunctorregistry.cpp
     lliconctrl.cpp
     llkeywords.cpp
+    lllayoutstack.cpp
     lllineeditor.cpp
     lllocalcliprect.cpp
     llmenugl.cpp
@@ -57,9 +60,13 @@ set(llui_SOURCE_FILES
     llscrollcontainer.cpp
     llscrollingpanellist.cpp
     llscrolllistctrl.cpp
+    llsearcheditor.cpp
     llslider.cpp
     llsliderctrl.cpp
     llspinctrl.cpp
+    llstatbar.cpp
+    llstatgraph.cpp
+    llstatview.cpp
     llstyle.cpp
     lltabcontainer.cpp
     lltextbox.cpp
@@ -72,6 +79,10 @@ set(llui_SOURCE_FILES
     lluictrlfactory.cpp
     lluistring.cpp
     llundo.cpp
+    llurlaction.cpp
+    llurlentry.cpp
+    llurlmatch.cpp
+    llurlregistry.cpp
     llview.cpp
     llviewborder.cpp
     llviewmodel.cpp
@@ -88,15 +99,18 @@ set(llui_HEADER_FILES
     llcheckboxctrl.h
     llclipboard.h
     llcombobox.h
+    llcontainerview.h
     llctrlselectioninterface.h
     lldraghandle.h
     lleditmenuhandler.h
+    llfiltereditor.h 
     llfloater.h
     llfocusmgr.h
     llfunctorregistry.h
     llhtmlhelp.h
     lliconctrl.h
     llkeywords.h
+    lllayoutstack.h
     lllineeditor.h
     lllocalcliprect.h
     llmemberlistener.h
@@ -116,6 +130,7 @@ set(llui_HEADER_FILES
     llresizehandle.h
     llresmgr.h
     llrootview.h
+    llsearcheditor.h 
     llscrollbar.h
     llscrollcontainer.h
     llscrollingpanellist.h
@@ -123,6 +138,9 @@ set(llui_HEADER_FILES
     llslider.h
     llsliderctrl.h
     llspinctrl.h
+    llstatbar.h
+    llstatgraph.h
+    llstatview.h
     llstyle.h
     lltabcontainer.h
     lltextbox.h
@@ -138,6 +156,10 @@ set(llui_HEADER_FILES
     lluistring.h
     lluixmltags.h
     llundo.h
+    llurlaction.h
+    llurlentry.h
+    llurlmatch.h
+    llurlregistry.h
     llview.h
     llviewborder.h
     llviewmodel.h

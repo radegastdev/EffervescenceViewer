@@ -28,6 +28,7 @@
 #include "llviewerstats.h"
 #include "llvoavatar.h"
 #include "llworld.h"
+#include "llnotifications.h"
 
 #include "../lscript/lscript_byteformat.h" //Need LSCRIPTRunTimePermissionBits and SCRIPT_PERMISSION_*
 
@@ -153,10 +154,13 @@ void RlvSettings::initClass()
 	}
 #endif // RLV_EXTENSION_STARTLOCATION
 
-// Checked: 2010-10-11 (RLVa-1.2.0e) | Added: RLVa-1.2.0e
+// Checked: 2013-04-17 (RLVa-1.4.8)
 bool RlvSettings::onChangedAvatarOffset(const LLSD& sdValue)
 {
-	gAgent.sendAgentSetAppearance();
+	if ( (isAgentAvatarValid()) && (!gAgentAvatarp->isUsingServerBakes()) )
+	{
+		gAgentAvatarp->computeBodySize();
+	}
 	return true;
 }
 // Checked: 2011-08-16 (RLVa-1.4.0b) | Added: RLVa-1.4.0b
@@ -704,7 +708,9 @@ bool rlvPredCanRemoveItem(const LLInventoryItem* pItem)
 				RLV_ASSERT(false);
 		}
 	}
-	return false;
+	// HACK-RLVa: Until LL supports temporary attachment detection assume that no inventory item means a temporary 
+	//            attachment which are always removeable
+	return true;
 }
 
 // Checked: 2010-03-22 (RLVa-1.2.0c) | Added: RLVa-1.2.0a

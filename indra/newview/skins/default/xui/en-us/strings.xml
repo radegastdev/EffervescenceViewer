@@ -109,6 +109,39 @@
 	
 	<string name="TooltipDragOntoOwnChild">You can't move a folder into its child</string>
 	<string name="TooltipDragOntoSelf">You can't move a folder into itself</string>
+	
+	<!-- tooltips for Urls -->
+	<string name="TooltipHttpUrl">Click to view this web page</string>
+	<string name="TooltipSLURL">Click to view this location's information</string>
+	<string name="TooltipAgentUrl">Click to view this Resident's profile</string>
+	<string name="TooltipAgentInspect">Learn more about this Resident</string>
+	<string name="TooltipAgentMute">Click to mute this Resident</string>
+	<string name="TooltipAgentUnmute">Click to unmute this Resident</string>
+	<string name="TooltipAgentIM">Click to IM this Resident</string>
+	<string name="TooltipAgentPay">Click to Pay this Resident</string>
+	<string name="TooltipAgentOfferTeleport">Click to offer a teleport request to this Resident</string>
+	<string name="TooltipAgentRequestFriend">Click to send a friend request to this Resident</string>
+	<string name="TooltipGroupUrl">Click to view this group's description</string>
+	<string name="TooltipEventUrl">Click to view this event's description</string>
+	<string name="TooltipClassifiedUrl">Click to view this classified</string>
+	<string name="TooltipParcelUrl">Click to view this parcel's description</string>
+	<string name="TooltipTeleportUrl">Click to teleport to this location</string>
+	<string name="TooltipObjectIMUrl">Click to view this object's description</string>
+	<string name="TooltipMapUrl">Click to view this location on a map</string>
+	<string name="TooltipSLAPP">Click to run the secondlife:// command</string>
+	<string name="CurrentURL" value=" CurrentURL: [CurrentURL]" />
+
+	<!-- text for SLURL labels -->
+	<string name="SLurlLabelTeleport">Teleport to</string>
+	<string name="SLurlLabelShowOnMap">Show Map for</string>
+
+	<!-- label strings for secondlife:///app/agent SLapps -->
+	<string name="SLappAgentMute">Mute</string>
+	<string name="SLappAgentUnmute">Unmute</string>
+	<string name="SLappAgentIM">IM</string>
+	<string name="SLappAgentPay">Pay</string>
+	<string name="SLappAgentOfferTeleport">Offer Teleport to </string>
+	<string name="SLappAgentRequestFriend">Friend Request </string>
 
 	<!-- searching - generic -->
 	<string name="Searching">Searching...</string>
@@ -2966,6 +2999,10 @@ Where tag = tag string to match.  Removes bot's matching the tag.
 	<string name="NotLoggedIn">Not logged in</string>
 
     <!-- Non-standard LLChat strings -->
+    <string name="ScriptCounting">Counting scripts, please wait...</string>
+    <string name="ScriptCountAvatar">Counted [SCRIPTS] scripts in [OBJECTS] attachments on [NAME].</string>
+    <string name="ScriptCountObject">Counted [SCRIPTS] scripts in [OBJECTS] objects.</string>
+    <string name="ScriptDeleteObject">Deleted [SCRIPTS] scripts in [OBJECTS] objects.</string>
     <string name="took_a_snapshot">took a snapshot</string>
 
   <!-- Avatar busy/away mode -->
@@ -3000,8 +3037,9 @@ Where tag = tag string to match.  Removes bot's matching the tag.
 
 	<!-- inventory -->
 	<string name="InventoryNoMatchingItems">No matching items found in inventory.</string>
+	<string name="InventoryNoTexture">You do not have a copy of this texture in your inventory</string>
 	<string name="MarketplaceURL">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/</string>
-	<string name="MarketplaceURL_CreateStore">http://community.secondlife.com/t5/English-Knowledge-Base/Selling-in-the-Marketplace/ta-p/700193#Section_.4</string>
+	<string name="MarketplaceURL_CreateStore">http://community.secondlife.com/t5/English-Knowledge-Base/Selling-in-the-Marketplace/ta-p/700193#Section_.3</string>
 	<string name="MarketplaceURL_Dashboard">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/merchants/store/dashboard</string>
 	<string name="MarketplaceURL_Imports">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/merchants/store/imports</string>
 	<string name="MarketplaceURL_LearnMore">https://marketplace.[MARKETPLACE_DOMAIN_NAME]/learn_more</string>
@@ -3269,6 +3307,10 @@ The
 	<string name="Region">Region</string>
 	<string name="RegionSettings">Region Settings</string>
 
+	<!-- Multi Preview Floater -->
+	<string name="MultiPreviewTitle">Preview</string>
+	<string name="MultiPropertiesTitle">Properties</string>
+
 	<!-- inventory offer -->
 	<string name="InvOfferAnObjectNamed">An object named</string>
 	<string name="InvOfferOwnedByGroup">owned by the group</string>
@@ -3342,6 +3384,10 @@ Expected .wav, .tga, .bmp, .jpg, .jpeg, or .bvh
 	<string name=".">.</string>
 	<string name="'">'</string>
 	<string name="---">---</string>
+
+	<!-- media -->
+	<string name="Multiple Media">Multiple Media</string>
+	<string name="Play Media">Play/Pause Media</string>
 
 	<!-- OSMessageBox messages -->
 	<string name="MBCmdLineError">
@@ -4011,6 +4057,9 @@ If you continue to receive this message, contact the [SUPPORT_SITE].
   <string name="answering-im">
     Connecting...
   </string>
+  <string name="conference-title">
+    Multi-person chat
+  </string>
   <string name="inventory_item_offered-im">
     Inventory item offered
   </string>
@@ -4098,6 +4147,8 @@ If you continue to receive this message, contact the [SUPPORT_SITE].
   </string>
 
   <string name="Home position set.">Home position set.</string>
+
+  <string name="voice_morphing_url">http://secondlife.com/landing/voicemorphing</string>
 
   <!-- Financial operations strings -->
   <string name="paid_you_ldollars">[NAME] paid you [CURRENCY][AMOUNT] [REASON].</string>
@@ -4242,6 +4293,8 @@ Try enclosing path to the editor with double quotes.
   <string name="BeaconSound">Viewing sound beacons (yellow)</string>
   <string name="BeaconMedia">Viewing media beacons (white)</string>
   <string name="ParticleHiding">Hiding Particles</string>
+
+  <string name="Command_Profile_Label">Profile</string>
 
   <!-- Pathfinding -->
   <string name="Pathfinding_Wiki_URL">http://wiki.secondlife.com/wiki/Pathfinding_Tools_in_the_Second_Life_Viewer</string>
