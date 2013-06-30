@@ -1,6 +1,16 @@
 <?xml version="1.0" ?>
 <llsd>
 	<map>
-    <!-- Some settings could go here :) -->
+    <key>OBJExportSwapYZ</key>
+    <map>
+      <key>Comment</key>
+      <string>OBJ Files saved swap Y and Z axes (useful for Cinema 4D users)</string>
+      <key>Persist</key>
+      <integer>1</integer>
+      <key>Type</key>
+      <string>Boolean</string>
+      <key>Value</key>
+      <integer>0</integer>
+    </map>
 	</map>
 </llsd>

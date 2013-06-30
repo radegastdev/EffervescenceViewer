@@ -6,6 +6,7 @@
 	<menu_item_call enabled="true" label="Groups..." name="Groups...">
 		<on_click function="ShowAgentGroups" userdata="agent" />
 	</menu_item_call>
+  <menu_item_separator />
 	<pie_menu enabled="true" label="Take Off &gt;" name="Take Off &gt;">
 		<pie_menu enabled="true" label="Clothes &gt;" name="Clothes &gt;">
 			<menu_item_call bottom="-29" enabled="false" height="19" label="Shirt" left="0"
@@ -85,38 +86,49 @@
 			<on_enable function="Self.EnableRemoveAllAttachments" />
 		</menu_item_call>
 	</pie_menu>
+	<menu_item_call enabled="true" label="Stand Up" name="Stand Up Self">
+		<on_click function="Self.SitOrStand"/>
+		<on_enable function="Self.EnableSitOrStand" userdata="Sit Down,Stand Up"/>
+	</menu_item_call>
+	<menu_item_call enabled="true" label="Appearance..." name="Appearance...">
+		<on_click function="ShowFloater" userdata="appearance" />
+		<on_enable function="Edit.EnableCustomizeAvatar" />
+	</menu_item_call>
   <pie_menu label="Tools &gt;" name="Tools &gt;">
-      <menu_item_call enabled="true" label="Reload" mouse_opaque="true" name="Reload Textures">
-          <on_click function="Avatar.ReloadTextures" />
-      </menu_item_call>
-	  <menu_item_call enabled="true" hidden="false" label="Anims..." mouse_opaque="true"
+    <menu_item_call enabled="true" label="Reload" mouse_opaque="true" name="Reload Textures">
+      <on_click function="Avatar.ReloadTextures" />
+    </menu_item_call>
+    <menu_item_call enabled="true" hidden="false" label="Anims..." mouse_opaque="true"
 						   name="Anims...">
-		  <on_click function="Avatar.Anims" />
-	  </menu_item_call>
-	  <menu_item_call enabled="false" hidden="false" label="S. Count" mouse_opaque="true" name="ScriptCount">
-		  <on_click function="Object.ScriptCount" />
-		  <on_visible function="Object.VisibleScriptCount" />
-	  </menu_item_call>
-	  <menu_item_call label="Script Info" mouse_opaque="true" name="Script Info">
-		  <on_click function="ShowFloater" userdata="script info" />
-		  <on_visible function="Self.VisibleScriptInfo" />
-	  </menu_item_call>
+      <on_click function="Avatar.Anims" />
+    </menu_item_call>
+    <menu_item_call enabled="false" hidden="false" label="S. Count" mouse_opaque="true" name="ScriptCount">
+      <on_click function="Object.ScriptCount" />
+      <on_visible function="Object.VisibleScriptCount" />
+    </menu_item_call>
+    <menu_item_call label="Script Info" mouse_opaque="true" name="Script Info">
+      <on_click function="ShowFloater" userdata="script info" />
+      <on_visible function="Self.VisibleScriptInfo" />
+    </menu_item_call>
     <menu_item_call enabled="true" label="Debug..." mouse_opaque="true" name="Debug Layers">
       <on_click function="Avatar.Debug" />
     </menu_item_call>
     <menu_item_call enabled="true" label="Copy UUID" mouse_opaque="true" name="CopyUUID">
       <on_click function="Avatar.CopyUUID" />
     </menu_item_call>
+    <pie_menu label="Save &gt;" name="Save &gt;">
+      <menu_item_call enabled="false" hidden="false" label="Save As..." mouse_opaque="true"
+               name="Save As...">
+        <on_click function="Object.Export" />
+        <on_enable function="Object.EnableExport" />
+      </menu_item_call>
+      <menu_item_call enabled="true" hidden="false" label="Save OBJ..." mouse_opaque="true"
+                name="Save OBJ...">
+        <on_click function="Avatar.SaveAsOBJ" />
+      </menu_item_call>
+    </pie_menu>
   </pie_menu>
-	<menu_item_call enabled="true" label="Stand Up" name="Stand Up Self">
-		<on_click function="Self.SitOrStand"/>
-		<on_enable function="Self.EnableSitOrStand" userdata="Sit Down,Stand Up"/>
-	</menu_item_call>
-	<menu_item_call enabled="true" label="Gestures..." name="Gestures...">
-		<on_click function="ShowFloater" userdata="gestures" />
-	</menu_item_call>
-	<menu_item_call enabled="true" label="Appearance..." name="Appearance...">
-		<on_click function="ShowFloater" userdata="appearance" />
-		<on_enable function="Edit.EnableCustomizeAvatar" />
-	</menu_item_call>
+  <menu_item_call enabled="true" label="Gestures..." name="Gestures...">
+    <on_click function="ShowFloater" userdata="gestures" />
+  </menu_item_call>
 </pie_menu>

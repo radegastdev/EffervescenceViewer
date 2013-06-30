@@ -171,6 +171,7 @@
 #include "shfloatermediaticker.h"
 #include "llpacketring.h"
 #include "aihttpview.h"
+#include "awavefront.h"
 // </edit>
 
 #include "scriptcounter.h"
@@ -486,6 +487,13 @@ void handle_mesh_save_obj(void*);
 void handle_mesh_load_obj(void*);
 void handle_morph_save_obj(void*);
 void handle_morph_load_obj(void*);
+void save_avatar_to_obj(LLVOAvatar *avatar);
+void save_selected_avatar_to_obj();
+void save_selected_objects_to_obj();
+void save_world_to_obj();
+void save_wavefront_continued(WavefrontSaver* wfsaver, AIFilePicker* filepicker);
+void handle_save_current_avatar_obj(void*);
+void handle_mesh_save_world_obj(void*);
 void handle_debug_avatar_textures(void*);
 void handle_dump_region_object_cache(void*);
 
@@ -701,6 +709,18 @@ void init_menus()
 	// TomY TODO convert these two
 	LLMenuGL*menu;
 
+	menu = new LLMenuGL("Effervescence");
+	menu->setCanTearOff(TRUE);
+	menu->addChild(new LLMenuItemCallGL(	"Save Entire Avatar OBJ",
+										&handle_save_current_avatar_obj, NULL, NULL, 'X', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
+	menu->addChild(new LLMenuItemCallGL(	"Save World OBJ",
+										&handle_mesh_save_world_obj, NULL, NULL, 'W', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
+	menu->addSeparator();
+	menu->addChild(new LLMenuItemCheckGL(  "Streaming Audio Display", 
+											&handle_ticker_toggle, &handle_ticker_enabled, &handle_singleton_check<SHFloaterMediaTicker>, NULL ));
+	
+	
+	
 	// <dogmode>
 	// Add in the pose stand -------------------------------------------
 	/*LLMenuGL* sub = new LLMenuGL("Pose Stand...");
@@ -6100,6 +6120,24 @@ class LLAvatarInviteToGroup : public view_listener_t
 	}
 };
 
+class LLAvatarSaveAsOBJ : public view_listener_t
+{
+	bool handleEvent(LLPointer<LLEvent> event, const LLSD& userdata)
+	{
+		save_selected_avatar_to_obj();
+		return true;
+	}
+};
+
+class LLSelectionSaveAsOBJ : public view_listener_t
+{
+	bool handleEvent(LLPointer<LLEvent> event, const LLSD& userdata)
+	{
+		save_selected_objects_to_obj();
+		return true;
+	}
+};
+
 class LLAvatarAddFriend : public view_listener_t
 {
 	bool handleEvent(LLPointer<LLEvent> event, const LLSD& userdata)
@@ -8483,6 +8521,92 @@ static void handle_morph_load_obj_continued(void* data, AIFilePicker* filepicker
 	morph_data->setMorphFromMesh(&mesh);
 }
 
+void handle_save_current_avatar_obj(void* data)
+{
+	if(gAgentAvatarp)
+		save_avatar_to_obj(gAgentAvatarp);
+}
+
+void handle_mesh_save_world_obj(void* data) //save the world!
+{
+	save_world_to_obj();
+}
+
+void save_selected_avatar_to_obj()
+{
+	LLVOAvatar* avatar = find_avatar_from_object( LLSelectMgr::getInstance()->getSelection()->getPrimaryObject() );
+	if(avatar)
+		save_avatar_to_obj(avatar);
+}
+
+void save_avatar_to_obj(LLVOAvatar *avatar)	
+{
+	std::string file_name = llformat("%s.obj", avatar->getFullname().c_str());
+	std::string full_path = gDirUtilp->getExpandedFilename(LL_PATH_LAST,file_name);
+
+	WavefrontSaver* wfsaver = new WavefrontSaver();
+	wfsaver->Add((LLVOAvatar*)avatar);
+
+	AIFilePicker* filepicker = AIFilePicker::create();
+	filepicker->open(full_path);
+	filepicker->run(boost::bind(&save_wavefront_continued, wfsaver, filepicker));
+}
+
+void save_selected_objects_to_obj()
+{
+	LLObjectSelectionHandle selection = LLSelectMgr::getInstance()->getSelection();
+	if(!selection)
+		return;
+	std::string file_name = llformat("%s.obj", selection->getFirstNode()->mName.c_str());
+	std::string full_path = gDirUtilp->getExpandedFilename(LL_PATH_LAST,file_name);
+
+	WavefrontSaver* wfsaver = new WavefrontSaver();
+	LLSelectNode* root_one = (LLSelectNode *)*selection->root_begin();
+	wfsaver->offset = -root_one->getObject()->getRenderPosition();
+	for (LLObjectSelection::iterator iter = selection->begin();
+		iter != selection->end(); iter++)
+	{
+		LLSelectNode* node = *iter;
+		LLViewerObject* object = node->getObject();
+		wfsaver->Add(object);
+	}
+
+	AIFilePicker* filepicker = AIFilePicker::create();
+	filepicker->open(full_path);
+	filepicker->run(boost::bind(&save_wavefront_continued, wfsaver, filepicker));
+}
+
+void save_world_to_obj()
+{
+	llinfos << "This function has yet to be implemented *snooze*" << llendl;
+}
+
+void save_wavefront_continued(WavefrontSaver* wfsaver, AIFilePicker* filepicker)
+{
+	if (!filepicker->hasFilename())
+	{
+		llwarns << "No file; bailing" << llendl;
+		return;
+	}
+	std::string selected_filename = filepicker->getFilename();
+	LLFILE* fp = LLFile::fopen(selected_filename, "wb");
+	if (!fp)
+	{
+		llerrs << "can't open: " << selected_filename << llendl;
+		return;
+	}
+	try
+	{
+		wfsaver->saveFile(fp);
+	}
+	catch(int e)
+	{
+		llwarns << "An exception occurred while generating / saving OBJ file. Exception #" << e << llendl;
+	}
+	llinfos << "OBJ file saved to " << selected_filename << llendl;
+	fclose(fp);
+}
+
 // Returns a pointer to the avatar give the UUID of the avatar OR of an attachment the avatar is wearing.
 // Returns NULL on failure.
 LLVOAvatar* find_avatar_from_object( LLViewerObject* object )
@@ -9356,6 +9480,7 @@ void initialize_menus()
 	addMenu(new LLAvatarEnableFreezeEject(), "Avatar.EnableFreezeEject");
 	addMenu(new LLAvatarCopyUUID(), "Avatar.CopyUUID");
 	addMenu(new LLAvatarClientUUID(), "Avatar.ClientID");
+	addMenu(new LLAvatarSaveAsOBJ(), "Avatar.SaveAsOBJ");
 
 	// Object pie menu
 	addMenu(new LLObjectOpen(), "Object.Open");
@@ -9387,7 +9512,7 @@ void initialize_menus()
 	addMenu(new LLObjectExport(), "Object.Export");
 	addMenu(new LLObjectImport(), "Object.Import");
 	addMenu(new LLObjectImportUpload(), "Object.ImportUpload");
-	
+	addMenu(new LLSelectionSaveAsOBJ(), "Object.SaveAsOBJ");
 
 	addMenu(new LLObjectEnableOpen(), "Object.EnableOpen");
 	addMenu(new LLObjectEnableTouch(), "Object.EnableTouch");
