@@ -26,6 +26,7 @@ set(cmake_SOURCE_FILES
     DBusGlib.cmake
     DirectX.cmake
     DownloadPrebuilt.cmake.in
+    Effervescence.cmake
     ELFIO.cmake
     EXPAT.cmake
     ExamplePlugin.cmake

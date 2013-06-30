@@ -45,6 +45,7 @@ add_custom_target(prepare DEPENDS ${prepare_depends})
 
 add_subdirectory(cmake)
 add_subdirectory(${LIBS_OPEN_PREFIX}aistatemachine)
+add_subdirectory(${LIBS_OPEN_PREFIX}effervescence)
 add_subdirectory(${LIBS_OPEN_PREFIX}llaudio)
 add_subdirectory(${LIBS_OPEN_PREFIX}llappearance)
 add_subdirectory(${LIBS_OPEN_PREFIX}llcharacter)

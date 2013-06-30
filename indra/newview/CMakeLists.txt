@@ -45,6 +45,8 @@ include(ViewerMiscLibs)
 include(GLOD)
 include(LLAppearance)
 
+include(Effervescence)
+
 if (WINDOWS)
     include(CopyWinLibs)
 endif (WINDOWS)
@@ -75,6 +77,9 @@ include_directories(
     ${LLAPPEARANCE_INCLUDE_DIRS}
 #    ${LSCRIPT_INCLUDE_DIRS}
 #    ${LSCRIPT_INCLUDE_DIRS}/lscript_compile
+
+    ${EFFERVESCENCE_INCLUDE_DIRS}
+
     )
 
 set(viewer_SOURCE_FILES
@@ -1321,6 +1326,7 @@ set(viewer_APPSETTINGS_FILES
     app_settings/settings_per_account.xml
     app_settings/settings_sh.xml
     app_settings/settings_rlv.xml
+    app_settings/settings_effervescence.xml
     app_settings/std_bump.ini
     app_settings/trees.xml
     app_settings/ultra_graphics.xml
@@ -1575,6 +1581,9 @@ target_link_libraries(${VIEWER_BINARY_NAME}
     ${HUNSPELL_LIBRARY}
     ${LLPHYSICSEXTENSIONS_LIBRARIES}
     ${LLAPPEARANCE_LIBRARIES}
+
+    ${EFFERVESCENCE_LIBRARIES}
+
     )
 
 if (LINUX)
