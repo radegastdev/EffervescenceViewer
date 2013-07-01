@@ -171,6 +171,7 @@
 #include "shfloatermediaticker.h"
 #include "llpacketring.h"
 #include "aihttpview.h"
+#include "special_functionality.h" // Effervescence Viewer
 #include "awavefront.h"
 // </edit>
 
@@ -706,21 +707,34 @@ void init_menus()
 	gAttachSubMenu = gMenuBarView->getChildMenuByName("Attach Object", TRUE);
 	gDetachSubMenu = gMenuBarView->getChildMenuByName("Detach Object", TRUE);
 
-	// TomY TODO convert these two
 	LLMenuGL*menu;
 
-	menu = new LLMenuGL("Effervescence");
-	menu->setCanTearOff(TRUE);
-	menu->addChild(new LLMenuItemCallGL(	"Save Entire Avatar OBJ",
-										&handle_save_current_avatar_obj, NULL, NULL, 'X', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
-	menu->addChild(new LLMenuItemCallGL(	"Save World OBJ",
-										&handle_mesh_save_world_obj, NULL, NULL, 'W', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
-	menu->addSeparator();
-	menu->addChild(new LLMenuItemCheckGL(  "Streaming Audio Display", 
-											&handle_ticker_toggle, &handle_ticker_enabled, &handle_singleton_check<SHFloaterMediaTicker>, NULL ));
+
+	// Effervescence Viewer
+
+	if(EffervescenceSpecialFunctionalitySwitch)
+	{
+		menu = new LLMenuGL("Effervescence");
+		menu->setCanTearOff(TRUE);
+		menu->addChild(new LLMenuItemCallGL(	"Save Entire Avatar OBJ",
+											&handle_save_current_avatar_obj, NULL, NULL, 'X', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
+		menu->addChild(new LLMenuItemCallGL(	"Save World OBJ",
+											&handle_mesh_save_world_obj, NULL, NULL, 'W', MASK_CONTROL | MASK_ALT | MASK_SHIFT));
+		menu->addSeparator();
+		menu->addChild(new LLMenuItemCheckGL(  "Streaming Audio Display", 
+												&handle_ticker_toggle, &handle_ticker_enabled, &handle_singleton_check<SHFloaterMediaTicker>, NULL ));
+	}
+
+	try
+	{
+		gMenuHolder->getChild<LLPieMenu>("Save >", true, false)->setVisible(EffervescenceSpecialFunctionalitySwitch);
+	}
+	catch(exception& e)
+	{
+		llerrs << e.what() << llendl;
+	}
 	
-	
-	
+
 	// <dogmode>
 	// Add in the pose stand -------------------------------------------
 	/*LLMenuGL* sub = new LLMenuGL("Pose Stand...");
