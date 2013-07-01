@@ -719,7 +719,7 @@ void init_menus()
 	menu->addChild(new LLMenuItemCheckGL(  "Streaming Audio Display", 
 											&handle_ticker_toggle, &handle_ticker_enabled, &handle_singleton_check<SHFloaterMediaTicker>, NULL ));
 	
-	
+	gMenuBarView->addChild( menu );
 	
 	// <dogmode>
 	// Add in the pose stand -------------------------------------------
