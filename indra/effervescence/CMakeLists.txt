@@ -46,7 +46,7 @@ include_directories(
 set(effervescence_SOURCE_FILES
     aversion.cpp
     awavefront.cpp
-    extra_functionality.cpp
+    special_functionality.cpp
     )
 
 set(effervescence_HEADER_FILES
@@ -54,7 +54,7 @@ set(effervescence_HEADER_FILES
 
     aversion.h
     awavefront.h
-    extra_functionality.h
+    special_functionality.h
     )
         
 set_source_files_properties(${effervescence_HEADER_FILES}
